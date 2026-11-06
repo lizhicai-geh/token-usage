@@ -75,7 +75,6 @@ struct LCDPanel: View {
                         .strokeBorder(.white.opacity(0.75), lineWidth: 1)
                 }
                 .frame(width: 328, height: 331)
-                .shadow(color: .black.opacity(0.23), radius: 2, x: 0, y: 2)
                 .position(x: 173, y: 171.5)
 
             RoundedRectangle(cornerRadius: 18)
