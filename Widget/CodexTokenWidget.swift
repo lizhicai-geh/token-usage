@@ -5,7 +5,10 @@ import WidgetKit
 struct CodexTokenWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: UsageSnapshot.widgetKind, provider: UsageProvider()) { entry in
-            LCDPanel(snapshot: entry.snapshot, date: entry.date, isPreview: entry.isPreview)
+            LCDPanel(
+                snapshot: entry.snapshot, date: entry.date, isPreview: entry.isPreview,
+                activityInteraction: entry.isPreview ? .none : .widgetLinks
+            )
                 .containerBackground(for: .widget) { Color(white: 0.96) }
         }
         .configurationDisplayName("Codex Token")

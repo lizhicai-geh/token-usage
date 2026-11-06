@@ -127,6 +127,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ENABLE_APP_SANDBOX = NO;
+				INFOPLIST_FILE = "Config/App-Info.plist";
 				PRODUCT_BUNDLE_IDENTIFIER = dev.codextoken.app;
 				PRODUCT_NAME = "Codex Token";
 			};

@@ -5,6 +5,7 @@ import WidgetKit
 @MainActor
 final class UsageController: NSObject, NSApplicationDelegate, ObservableObject {
     @Published private(set) var snapshot: UsageSnapshot?
+    @Published var selectedActivityDay: Date?
     @Published private var localError: String?
     @Published private var accountError: String?
     @Published private var isRefreshingLocal = false

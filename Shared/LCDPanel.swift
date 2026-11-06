@@ -4,6 +4,7 @@ struct LCDPanel: View {
     let snapshot: UsageSnapshot?
     let date: Date
     var isPreview = false
+    var activityInteraction: ActivityGrid.Interaction = .none
 
     private static let side: CGFloat = 346
     private static let ink = Color(red: 0.065, green: 0.080, blue: 0.069)
@@ -54,8 +55,7 @@ struct LCDPanel: View {
                 .font(.system(size: 10, weight: .semibold))
                 .offset(x: 38, y: 169)
 
-            ActivityGrid(activity: activity)
-                .frame(width: 273, height: 76)
+            ActivityGrid(activity: activity, calendar: calendar, ink: Self.ink, interaction: activityInteraction)
                 .offset(x: 37, y: 185)
 
             rule(at: 267)
@@ -171,38 +171,6 @@ struct LCDPanel: View {
         let stale = date.timeIntervalSince(fetchedAt) > 3 * UsageSnapshot.refreshInterval
         let source = todayIsLocal ? "本机用量" : "账户用量"
         return "已更新 \(time) · \(stale ? "缓存数据" : source)"
-    }
-
-    private struct ActivityGrid: View {
-        let activity: ActivityCalendar
-
-        var body: some View {
-            Canvas { context, size in
-                let columnWidth = size.width / CGFloat(ActivityCalendar.weekCount)
-                for (column, week) in activity.weeks.enumerated() {
-                    let x = CGFloat(column) * columnWidth
-                    if let month = week.month {
-                        let label = Text("\(month)月").font(.system(size: 7, weight: .medium)).foregroundStyle(ink)
-                        context.draw(label, at: CGPoint(x: x + 2, y: 7), anchor: .leading)
-                    }
-                    for (row, day) in week.days.enumerated() where !day.isFuture {
-                        let rect = CGRect(x: x, y: 16 + CGFloat(row) * 8.75, width: columnWidth - 2.15, height: 7.15)
-                        context.fill(Path(roundedRect: rect, cornerRadius: 1.45), with: .color(ink.opacity(opacity(day.tokens))))
-                    }
-                }
-            }
-            .accessibilityLabel("最近 \(ActivityCalendar.weekCount) 周 Token 活动")
-        }
-
-        private func opacity(_ tokens: UInt64?) -> Double {
-            guard let tokens, tokens > 0, activity.peak > 0 else { return 0.13 }
-            switch Double(tokens) / Double(activity.peak) {
-            case ..<0.08: return 0.29
-            case ..<0.25: return 0.46
-            case ..<0.60: return 0.62
-            default: return 0.82
-            }
-        }
     }
 
     private struct SegmentReadout: View {
