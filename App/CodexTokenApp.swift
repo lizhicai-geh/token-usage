@@ -52,10 +52,12 @@ final class UsageController: NSObject, NSApplicationDelegate, ObservableObject {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         refreshLoop = Task {
+            let clock = ContinuousClock()
             while !Task.isCancelled {
+                let nextRefresh = clock.now + .seconds(60)
                 await refresh()
                 do {
-                    try await Task.sleep(for: .seconds(UsageSnapshot.refreshInterval))
+                    try await clock.sleep(until: nextRefresh)
                 } catch {
                     break
                 }
@@ -76,7 +78,12 @@ final class UsageController: NSObject, NSApplicationDelegate, ObservableObject {
             let updated = try await Task.detached(priority: .utility) {
                 let client = try AppServerClient.installed()
                 let usage = try client.readUsage()
-                return UsageSnapshot(usage: usage, fetchedAt: .now)
+                let now = Date.now
+                let calendar = Calendar.localGregorian
+                let today = calendar.usageDateKey(for: now)
+                let hasAccountToday = usage.dailyUsageBuckets?.contains { $0.startDate == today } == true
+                let localToday = hasAccountToday ? nil : LocalUsage.readToday(codexHome: LocalUsage.codexHome, date: now, calendar: calendar)
+                return UsageSnapshot(usage: usage, fetchedAt: now, localToday: localToday)
             }.value
             try updated.save()
             snapshot = updated

@@ -23,7 +23,7 @@ struct LCDPanel: View {
 
     private var face: some View {
         let calendar = Calendar.localGregorian
-        let activity = ActivityCalendar(usage: snapshot?.usage, date: date, calendar: calendar)
+        let activity = ActivityCalendar(usage: snapshot?.usage, localToday: snapshot?.localToday, date: date, calendar: calendar)
         let day = calendar.usageDateKey(for: date).suffix(5).replacingOccurrences(of: "-", with: "/")
         let readout = TokenFormat.lcd(activity.todayTokens)
 
@@ -38,10 +38,10 @@ struct LCDPanel: View {
             SegmentReadout(readout: readout)
                 .frame(width: 246, height: 60)
                 .position(x: 170, y: 111)
-                .accessibilityLabel("今日 Token 数")
+                .accessibilityLabel(activity.todayIsLocal ? "今日本机 Token 数" : "今日 Token 数")
                 .accessibilityValue(activity.todayTokens.map(String.init) ?? "暂无数据")
 
-            Text("今日 TOKENS")
+            Text(activity.todayIsLocal ? "今日 TOKENS · 本机" : "今日 TOKENS")
                 .font(.system(size: 10, weight: .medium, design: .monospaced))
                 .position(x: 173, y: 153)
                 .accessibilityHidden(true)

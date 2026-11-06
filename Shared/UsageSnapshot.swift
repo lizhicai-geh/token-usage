@@ -4,6 +4,7 @@ import Foundation
 struct UsageSnapshot: Codable, Sendable {
     let usage: AccountUsage
     let fetchedAt: Date
+    var localToday: AccountUsage.DailyBucket? = nil
 
     static let widgetKind = "dev.codextoken.usage"
     static let refreshInterval: TimeInterval = 15 * 60
