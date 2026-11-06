@@ -1,0 +1,173 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		C0DE00000000000000000001 /* CodexTokenWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = C0DE00000000000000000003 /* CodexTokenWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		C0DE00000000000000000002 = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C0DE00000000000000000017 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C0DE0000000000000000000E;
+			remoteInfo = CodexTokenWidget;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		C0DE00000000000000000003 /* CodexTokenWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CodexTokenWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		C0DE00000000000000000004 /* Codex Token.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Codex Token.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		C0DE00000000000000000005 /* App */ = {isa = PBXFileSystemSynchronizedRootGroup; path = App; sourceTree = "<group>"; };
+		C0DE00000000000000000006 /* Widget */ = {isa = PBXFileSystemSynchronizedRootGroup; path = Widget; sourceTree = "<group>"; };
+		C0DE00000000000000000007 /* Shared */ = {isa = PBXFileSystemSynchronizedRootGroup; path = Shared; sourceTree = "<group>"; };
+		C0DE00000000000000000008 /* Config */ = {isa = PBXFileSystemSynchronizedRootGroup; path = Config; sourceTree = "<group>"; };
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXGroup section */
+		C0DE00000000000000000009 = {
+			isa = PBXGroup;
+			children = (
+				C0DE00000000000000000005 /* App */,
+				C0DE00000000000000000006 /* Widget */,
+				C0DE00000000000000000007 /* Shared */,
+				C0DE00000000000000000008 /* Config */,
+				C0DE0000000000000000000A /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		C0DE0000000000000000000A /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				C0DE00000000000000000004 /* Codex Token.app */,
+				C0DE00000000000000000003 /* CodexTokenWidget.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXSourcesBuildPhase section */
+		C0DE0000000000000000000B /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		C0DE0000000000000000000C /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXNativeTarget section */
+		C0DE0000000000000000000D /* CodexToken */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C0DE00000000000000000014;
+			buildPhases = (
+				C0DE0000000000000000000B /* Sources */,
+				C0DE0000000000000000000F /* Embed App Extensions */,
+			);
+			buildRules = ();
+			dependencies = (C0DE00000000000000000010, );
+			fileSystemSynchronizedGroups = (C0DE00000000000000000005, C0DE00000000000000000007, );
+			name = CodexToken;
+			productName = "Codex Token";
+			productReference = C0DE00000000000000000004 /* Codex Token.app */;
+			productType = "com.apple.product-type.application";
+		};
+		C0DE0000000000000000000E /* CodexTokenWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C0DE00000000000000000015;
+			buildPhases = (C0DE0000000000000000000C /* Sources */, );
+			buildRules = ();
+			dependencies = ();
+			fileSystemSynchronizedGroups = (C0DE00000000000000000006, C0DE00000000000000000007, );
+			name = CodexTokenWidget;
+			productName = CodexTokenWidget;
+			productReference = C0DE00000000000000000003 /* CodexTokenWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		C0DE0000000000000000000F /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (C0DE00000000000000000001 /* CodexTokenWidget.appex in Embed App Extensions */, );
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		C0DE00000000000000000010 = {isa = PBXTargetDependency; target = C0DE0000000000000000000E /* CodexTokenWidget */; targetProxy = C0DE00000000000000000002; };
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		C0DE00000000000000000011 /* Local project settings */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO;
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_LANGUAGE = "zh-Hans";
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0.0;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Local;
+		};
+		C0DE00000000000000000012 /* Local app settings */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ENABLE_APP_SANDBOX = NO;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.codextoken.app;
+				PRODUCT_NAME = "Codex Token";
+			};
+			name = Local;
+		};
+		C0DE00000000000000000013 /* Local widget settings */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = Config/Widget.entitlements;
+				ENABLE_APP_SANDBOX = YES;
+				INFOPLIST_FILE = "Config/Widget-Info.plist";
+				PRODUCT_BUNDLE_IDENTIFIER = dev.codextoken.app.widget;
+				PRODUCT_NAME = CodexTokenWidget;
+				SKIP_INSTALL = YES;
+			};
+			name = Local;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		C0DE00000000000000000014 = {isa = XCConfigurationList; buildConfigurations = (C0DE00000000000000000012, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Local; };
+		C0DE00000000000000000015 = {isa = XCConfigurationList; buildConfigurations = (C0DE00000000000000000013, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Local; };
+		C0DE00000000000000000016 = {isa = XCConfigurationList; buildConfigurations = (C0DE00000000000000000011, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Local; };
+/* End XCConfigurationList section */
+
+/* Begin PBXProject section */
+		C0DE00000000000000000017 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {LastSwiftUpdateCheck = 1600; LastUpgradeCheck = 1600; };
+			buildConfigurationList = C0DE00000000000000000016;
+			developmentRegion = "zh-Hans";
+			knownRegions = ("zh-Hans", Base, );
+			mainGroup = C0DE00000000000000000009;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = C0DE0000000000000000000A /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (C0DE0000000000000000000D, C0DE0000000000000000000E, );
+		};
+/* End PBXProject section */
+	};
+	rootObject = C0DE00000000000000000017 /* Project object */;
+}
