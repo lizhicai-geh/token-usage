@@ -2,14 +2,16 @@ import Darwin
 import Foundation
 
 struct UsageSnapshot: Codable, Sendable {
-    let usage: AccountUsage
-    let fetchedAt: Date
-    var localToday: AccountUsage.DailyBucket? = nil
+    var usage: AccountUsage?
+    var fetchedAt: Date?
+    var localToday: AccountUsage.DailyBucket?
+    var localFetchedAt: Date?
+    var accountUnavailable: Bool?
 
     static let widgetKind = "dev.codextoken.usage"
     static let refreshInterval: TimeInterval = 15 * 60
 
-    private static var file: URL? {
+    static var directory: URL? {
         // Foundation returns the extension's sandbox home. Resolve the login
         // home so both processes address the same file.
         var record = passwd()
@@ -19,9 +21,11 @@ struct UsageSnapshot: Codable, Sendable {
             guard getpwuid_r(getuid(), &record, buffer.baseAddress, buffer.count, &result) == 0,
                   result != nil, let directory = record.pw_dir else { return nil }
             return URL(filePath: String(cString: directory), directoryHint: .isDirectory)
-                .appending(path: "Library/Application Support/CodexTokenWidget/usage.json")
+                .appending(path: "Library/Application Support/CodexTokenWidget", directoryHint: .isDirectory)
         }
     }
+
+    private static var file: URL? { directory?.appending(path: "usage.json") }
 
     static func load() -> Self? {
         guard let file, let data = try? Data(contentsOf: file) else { return nil }

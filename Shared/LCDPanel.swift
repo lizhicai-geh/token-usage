@@ -23,7 +23,10 @@ struct LCDPanel: View {
 
     private var face: some View {
         let calendar = Calendar.localGregorian
-        let activity = ActivityCalendar(usage: snapshot?.usage, localToday: snapshot?.localToday, date: date, calendar: calendar)
+        let activity = ActivityCalendar(
+            usage: snapshot?.usage, localToday: snapshot?.localToday, preferLocalToday: snapshot?.accountUnavailable == true,
+            date: date, calendar: calendar
+        )
         let day = calendar.usageDateKey(for: date).suffix(5).replacingOccurrences(of: "-", with: "/")
         let readout = TokenFormat.lcd(activity.todayTokens)
 
@@ -38,10 +41,10 @@ struct LCDPanel: View {
             SegmentReadout(readout: readout)
                 .frame(width: 246, height: 60)
                 .position(x: 170, y: 111)
-                .accessibilityLabel(activity.todayIsLocal ? "今日本机 Token 数" : "今日 Token 数")
+                .accessibilityLabel(todayLabel(activity))
                 .accessibilityValue(activity.todayTokens.map(String.init) ?? "暂无数据")
 
-            Text(activity.todayIsLocal ? "今日 TOKENS · 本机" : "今日 TOKENS")
+            Text(todayLabel(activity))
                 .font(.system(size: 10, weight: .medium, design: .monospaced))
                 .position(x: 173, y: 153)
                 .accessibilityHidden(true)
@@ -59,7 +62,7 @@ struct LCDPanel: View {
             summary.offset(x: 35, y: 275)
             rule(at: 305)
 
-            Text(footer)
+            Text(footer(todayIsLocal: activity.todayIsLocal))
                 .font(.system(size: 6.5, weight: .medium))
                 .position(x: 173, y: 313)
         }
@@ -122,7 +125,7 @@ struct LCDPanel: View {
     }
 
     private var summary: some View {
-        let stats = snapshot?.usage.summary
+        let stats = snapshot?.usage?.summary
         return HStack(spacing: 0) {
             metric("累计 Token 数", TokenFormat.count(stats?.lifetimeTokens))
             metric("Token 使用峰值", TokenFormat.count(stats?.peakDailyTokens), divided: true)
@@ -152,15 +155,22 @@ struct LCDPanel: View {
         .accessibilityValue(value)
     }
 
-    private var footer: String {
+    private func todayLabel(_ activity: ActivityCalendar) -> String {
+        guard activity.todayTokens != nil else { return "今日 TOKENS" }
+        return activity.todayIsLocal ? "今日 TOKENS · 本机" : "今日 TOKENS · 账户"
+    }
+
+    private func footer(todayIsLocal: Bool) -> String {
         if isPreview { return "已更新 15:20 · 预览数据" }
-        guard let snapshot else { return "打开 Codex Token 刷新" }
+        let fetchedAt = todayIsLocal ? snapshot?.localFetchedAt ?? snapshot?.fetchedAt : snapshot?.fetchedAt
+        guard let fetchedAt else { return "打开 Codex Token 刷新" }
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "HH:mm"
-        let time = formatter.string(from: snapshot.fetchedAt)
-        let stale = date.timeIntervalSince(snapshot.fetchedAt) > 3 * UsageSnapshot.refreshInterval
-        return "已更新 \(time) · \(stale ? "缓存数据" : "账户用量")"
+        let time = formatter.string(from: fetchedAt)
+        let stale = date.timeIntervalSince(fetchedAt) > 3 * UsageSnapshot.refreshInterval
+        let source = todayIsLocal ? "本机用量" : "账户用量"
+        return "已更新 \(time) · \(stale ? "缓存数据" : source)"
     }
 
     private struct ActivityGrid: View {

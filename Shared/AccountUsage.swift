@@ -36,7 +36,8 @@ struct ActivityCalendar {
     let weeks: [Week]
     let peak: UInt64
 
-    init(usage: AccountUsage?, localToday: AccountUsage.DailyBucket? = nil, date: Date, calendar: Calendar = .localGregorian) {
+    init(usage: AccountUsage?, localToday: AccountUsage.DailyBucket? = nil, preferLocalToday: Bool = false,
+         date: Date, calendar: Calendar = .localGregorian) {
         let tokensByDate = Dictionary(
             (usage?.dailyUsageBuckets ?? []).map { ($0.startDate, $0.tokens) },
             uniquingKeysWith: { _, latest in latest }
@@ -45,8 +46,8 @@ struct ActivityCalendar {
         let todayKey = calendar.usageDateKey(for: today)
         let accountTokens = tokensByDate[todayKey]
         let localTokens = localToday.flatMap { $0.startDate == todayKey ? $0.tokens : nil }
-        todayTokens = accountTokens ?? localTokens
-        todayIsLocal = accountTokens == nil && localTokens != nil
+        todayIsLocal = localTokens != nil && (preferLocalToday || accountTokens == nil)
+        todayTokens = todayIsLocal ? localTokens : accountTokens
 
         let daysSinceMonday = (calendar.component(.weekday, from: today) + 5) % 7
         let firstOffset = -daysSinceMonday - (Self.weekCount - 1) * 7

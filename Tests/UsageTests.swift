@@ -2,7 +2,8 @@ import Foundation
 
 @main
 enum UsageTests {
-    static func main() throws {
+    @MainActor
+    static func main() async throws {
         if CommandLine.arguments.dropFirst().first == "app-server" {
             try serve()
             return
@@ -39,6 +40,7 @@ enum UsageTests {
         try expectFailure("invalid", executable: executable, .invalidResponse)
         try expectFailure("error", executable: executable, .rpc(code: -32601, message: "Method not found"))
         try expectFailure("timeout", executable: executable, .timeout)
+        try await checkIndependentRefresh(account: usage)
         print("用量、热力图、格式和 App Server RPC 测试通过")
     }
 
@@ -57,12 +59,34 @@ enum UsageTests {
             tokenEvent("2026-11-03T17:00:00Z", total: 10, last: 10),
             tokenEvent("2026-11-03T17:01:00Z", total: 100, last: 90),
             tokenEvent("2026-11-04T05:00:00Z", total: 500, last: 400)
-        ].joined(separator: "\n")
-        try Data(samples.utf8).write(to: sessions.appending(path: "rollout-original.jsonl"))
-        try Data(samples.utf8).write(to: archive.appending(path: "rollout-fork.jsonl"))
+        ].joined(separator: "\n") + "\n"
+        let nextTime = date.addingTimeInterval(7_200)
+        let tomorrow = try require(calendar.date(byAdding: .day, value: 1, to: nextTime))
+        let liveFile = sessions.appending(path: "rollout-original.jsonl")
+        for file in [liveFile, archive.appending(path: "rollout-fork.jsonl")] {
+            try Data(samples.utf8).write(to: file)
+            try FileManager.default.setAttributes([.modificationDate: tomorrow], ofItemAtPath: file.path)
+        }
 
-        let local = LocalUsage.readToday(codexHome: root, date: date, calendar: calendar)
+        let index = root.appending(path: "local-index.json")
+        let local = try LocalUsage.readToday(codexHome: root, indexFile: index, date: date, calendar: calendar)
         try check(local == .init(startDate: "2026-11-04", tokens: 220), "本机统计跨午夜增量，排除重复、分叉历史和未来事件")
+        let resumed = try LocalUsage.readToday(codexHome: root, indexFile: index, date: date, calendar: calendar)
+        try check(resumed == local, "重启后读取持久进度不重复计数")
+        let event = tokenEvent("2026-11-04T05:30:00Z", total: 560, last: 60)
+        try append(event, to: liveFile, modifiedAt: tomorrow)
+        let partial = try LocalUsage.readToday(codexHome: root, indexFile: index, date: nextTime, calendar: calendar)
+        try check(partial?.tokens == 620, "续读已到时的事件，保留尚未换行的尾部")
+        try append("\n", to: liveFile, modifiedAt: tomorrow)
+        let completed = try LocalUsage.readToday(codexHome: root, indexFile: index, date: nextTime, calendar: calendar)
+        try check(completed?.tokens == 680, "下一次读取补齐的行")
+        let archived = archive.appending(path: liveFile.lastPathComponent)
+        try FileManager.default.moveItem(at: liveFile, to: archived)
+        let afterMove = try LocalUsage.readToday(codexHome: root, indexFile: index, date: nextTime, calendar: calendar)
+        try check(afterMove == completed, "归档移动保留读取进度")
+        try append(tokenEvent("2026-11-04T16:00:00Z", total: 575, last: 15) + "\n", to: archived, modifiedAt: tomorrow)
+        let nextDay = try LocalUsage.readToday(codexHome: root, indexFile: index, date: tomorrow, calendar: calendar)
+        try check(nextDay == .init(startDate: "2026-11-05", tokens: 15), "跨午夜从当前累计基线开始新一天")
         let fallback = ActivityCalendar(usage: emptyAccount, localToday: local, date: date, calendar: calendar)
         try check(fallback.todayTokens == 220 && fallback.todayIsLocal, "账户缺当天时显示本机数据")
         let preferred = ActivityCalendar(usage: account, localToday: local, date: date, calendar: calendar)
@@ -73,6 +97,76 @@ enum UsageTests {
         try check(zero.todayTokens == 0 && !zero.todayIsLocal, "账户明确返回的零优先")
         let expired = ActivityCalendar(usage: emptyAccount, localToday: local, date: previousDay, calendar: calendar)
         try check(expired.todayTokens == nil && !expired.todayIsLocal, "其他日期的本机快照不能当作今天")
+    }
+
+    @MainActor
+    private static func checkIndependentRefresh(account: AccountUsage) async throws {
+        let now = Date.now
+        let today = Calendar.localGregorian.usageDateKey(for: now)
+        let cachedAccount = AccountUsage(summary: account.summary, dailyUsageBuckets: [.init(startDate: today, tokens: 800)])
+        let currentAccount = AccountUsage(summary: account.summary, dailyUsageBuckets: [.init(startDate: today, tokens: 900)])
+        let gate = AccountGate()
+        var saved: UsageSnapshot?
+        let controller = UsageController(
+            snapshot: UsageSnapshot(usage: cachedAccount, fetchedAt: now.addingTimeInterval(-60)),
+            readAccount: { try await gate.read() },
+            readLocal: { .init(startDate: today, tokens: 321) },
+            publish: { saved = $0 }
+        )
+        let pending = Task { await controller.refreshAccount() }
+        await gate.waitForRequest()
+        await controller.refreshLocal()
+        try check(saved?.localToday?.tokens == 321 && saved?.usage == cachedAccount, "账户请求挂起时本机数据独立写入，保留历史账户数据")
+        await gate.finish(.failure(AppServerError.timeout))
+        await pending.value
+        try check(saved?.localToday?.tokens == 321 && saved?.accountUnavailable == true, "账户超时后保留本机数据")
+        let duringTimeout = ActivityCalendar(
+            usage: saved?.usage, localToday: saved?.localToday, preferLocalToday: saved?.accountUnavailable == true, date: now
+        )
+        try check(duringTimeout.todayTokens == 321 && duringTimeout.todayIsLocal, "超时时主数字优先使用本机数据")
+
+        let retry = Task { await controller.refreshAccount() }
+        await gate.waitForRequest()
+        await gate.finish(.success(currentAccount))
+        await retry.value
+        let updated = try require(saved)
+        let displayed = ActivityCalendar(
+            usage: updated.usage, localToday: updated.localToday, preferLocalToday: updated.accountUnavailable == true,
+            date: now, calendar: .localGregorian
+        )
+        try check(displayed.todayTokens == 900 && !displayed.todayIsLocal && updated.localToday?.tokens == 321, "账户数据回来自动切换来源")
+    }
+
+    private actor AccountGate {
+        private var reply: CheckedContinuation<AccountUsage, any Error>?
+        private var started: CheckedContinuation<Void, Never>?
+
+        func read() async throws -> AccountUsage {
+            try await withCheckedThrowingContinuation { continuation in
+                reply = continuation
+                started?.resume()
+                started = nil
+            }
+        }
+
+        func waitForRequest() async {
+            guard reply == nil else { return }
+            await withCheckedContinuation { started = $0 }
+        }
+
+        func finish(_ result: Result<AccountUsage, any Error>) {
+            let pending = reply
+            reply = nil
+            pending?.resume(with: result)
+        }
+    }
+
+    private static func append(_ text: String, to url: URL, modifiedAt: Date) throws {
+        let file = try FileHandle(forWritingTo: url)
+        defer { try? file.close() }
+        try file.seekToEnd()
+        try file.write(contentsOf: Data(text.utf8))
+        try FileManager.default.setAttributes([.modificationDate: modifiedAt], ofItemAtPath: url.path)
     }
 
     private static func tokenEvent(_ timestamp: String, total: UInt64, last: UInt64) -> String {
