@@ -43,6 +43,14 @@ struct AppServerClient: Sendable {
     }
 
     func readUsage() throws -> AccountUsage {
+        try read(method: "account/usage/read")
+    }
+
+    func readRateLimits() throws -> AccountRateLimits {
+        try read(method: "account/rateLimits/read")
+    }
+
+    private func read<Result: Decodable>(method: String) throws -> Result {
         let process = Process()
         let input = Pipe()
         let output = Pipe()
@@ -67,7 +75,7 @@ struct AppServerClient: Sendable {
         try rpc.send(#"{"id":1,"method":"initialize","params":{"clientInfo":{"name":"codex_token_widget","title":"Codex Token Widget","version":"1.0.0"}}}"#)
         let _: StdioRPC.Initialized = try rpc.response(id: 1)
         try rpc.send(#"{"method":"initialized"}"#)
-        try rpc.send(#"{"id":2,"method":"account/usage/read"}"#)
+        try rpc.send("{\"id\":2,\"method\":\"\(method)\"}")
         return try rpc.response(id: 2)
     }
 }

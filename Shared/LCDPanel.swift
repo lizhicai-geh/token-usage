@@ -5,11 +5,21 @@ struct LCDPanel: View {
     let date: Date
     var isPreview = false
     var activityInteraction: ActivityGrid.Interaction = .none
+    var allowsAllowancePopover = false
+    @State private var showsAllowanceDetails = false
+    @State private var isHoveringAllowance = false
 
     private static let side: CGFloat = 346
     private static let ink = Color(red: 0.065, green: 0.080, blue: 0.069)
     private static let divider = ink.opacity(0.28)
-    private static let screenSize = CGSize(width: 290, height: 295)
+    private static let screenSize = CGSize(width: 290, height: 290)
+    private static let contentFrame = CGRect(x: 28, y: 28, width: screenSize.width, height: screenSize.height)
+        .insetBy(dx: 12, dy: 12)
+
+    private var includesActivityHistory: Bool {
+        if case .hover = activityInteraction { return true }
+        return false
+    }
 
     var body: some View {
         GeometryReader { geometry in
@@ -26,7 +36,7 @@ struct LCDPanel: View {
         let calendar = Calendar.localGregorian
         let activity = ActivityCalendar(
             usage: snapshot?.usage, localToday: snapshot?.localToday, preferLocalToday: snapshot?.accountUnavailable == true,
-            date: date, calendar: calendar
+            date: date, calendar: calendar, includeHistory: includesActivityHistory
         )
         let day = calendar.usageDateKey(for: date).suffix(5).replacingOccurrences(of: "-", with: "/")
         let readout = TokenFormat.lcd(activity.todayTokens)
@@ -34,39 +44,191 @@ struct LCDPanel: View {
         return ZStack(alignment: .topLeading) {
             bezel
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(day)  今日").font(.system(size: 10, weight: .semibold, design: .monospaced))
-                Text("Codex · 账户 · API").font(.system(size: 8, weight: .medium))
+                Text("\(day)")
+                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                Text(date.formatted(.dateTime.weekday(.wide).locale(Locale(identifier: "zh_CN"))))
+                    .font(.system(size: 8, weight: .medium))
             }
-            .offset(x: 40, y: 36)
+            .offset(x: Self.contentFrame.minX, y: Self.contentFrame.minY)
+
+            allowance
+                .frame(width: 34, height: 34)
+                .position(x: Self.contentFrame.maxX - 11.5, y: Self.contentFrame.minY + 11.5)
+                .zIndex(1)
 
             SegmentReadout(readout: readout)
                 .frame(width: 246, height: 60)
-                .position(x: 170, y: 111)
+                .position(x: 170, y: 113)
                 .accessibilityLabel(todayLabel(activity))
                 .accessibilityValue(activity.todayTokens.map(String.init) ?? "暂无数据")
 
             Text(todayLabel(activity))
                 .font(.system(size: 10, weight: .medium, design: .monospaced))
-                .position(x: 173, y: 153)
+                .position(x: 173, y: 155)
                 .accessibilityHidden(true)
 
-            rule(at: 163)
-            Text("Token 活动")
-                .font(.system(size: 10, weight: .semibold))
-                .offset(x: 38, y: 169)
+            rule(at: 167)
+            HStack {
+                Text("Token 活动")
+                    .font(.system(size: 10, weight: .semibold))
+                Spacer()
+                if includesActivityHistory && activity.weeks.count > ActivityCalendar.weekCount {
+                    Text("左右滑动")
+                        .font(.system(size: 7))
+                        .foregroundStyle(Self.ink.opacity(0.6))
+                }
+            }
+                .frame(width: Self.contentFrame.width)
+                .offset(x: Self.contentFrame.minX, y: 173)
 
             ActivityGrid(activity: activity, calendar: calendar, ink: Self.ink, interaction: activityInteraction)
-                .offset(x: 37, y: 185)
+                .offset(x: Self.contentFrame.minX, y: 189)
 
-            rule(at: 267)
-            summary.offset(x: 35, y: 275)
-            rule(at: 305)
-
-            Text(footer(todayIsLocal: activity.todayIsLocal))
-                .font(.system(size: 6.5, weight: .medium))
-                .position(x: 173, y: 313)
+            rule(at: 271)
+            summary.offset(x: Self.contentFrame.minX, y: Self.contentFrame.maxY - 26)
         }
         .foregroundStyle(Self.ink)
+    }
+
+    private var allowance: some View {
+        Group {
+            if allowsAllowancePopover {
+                Button { showsAllowanceDetails.toggle() } label: { allowanceRing }
+                    .buttonStyle(.plain)
+                    .popover(isPresented: $showsAllowanceDetails, arrowEdge: .bottom) {
+                        allowanceDetails
+                    }
+            } else {
+                allowanceRing
+                    .help(allowanceDescription)
+            }
+        }
+        .onHover { isHoveringAllowance = $0 }
+        .overlay(alignment: .trailing) {
+            if isHoveringAllowance && !showsAllowanceDetails {
+                allowanceTooltip
+                    .fixedSize()
+                    .offset(x: -42)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+        }
+        .accessibilityLabel("当前使用\(snapshot?.rateLimits?.label ?? "额度")")
+        .accessibilityValue(allowanceDescription)
+    }
+
+    private var allowanceRing: some View {
+        let limits = snapshot?.rateLimits
+        let available = snapshot?.rateLimitsUnavailable != true
+        let progress: Double = {
+            guard available, let limits else { return 0 }
+            switch limits.source {
+            case .weekly: return Double(max(0, min(100, 100 - (limits.codex.weekly?.usedPercent ?? 100)))) / 100
+            case .credits: return limits.codex.credits?.hasCredits == true || limits.codex.credits?.unlimited == true ? 1 : 0
+            case .unknown: return 0
+            }
+        }()
+
+        return ZStack {
+            Circle().stroke(Self.ink.opacity(0.18), lineWidth: 2)
+            if progress > 0 {
+                Circle()
+                    .trim(from: 0, to: progress)
+                    .stroke(Self.ink.opacity(0.85), style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+            }
+            if limits?.source == .credits {
+                CoinStack()
+                    .stroke(Self.ink.opacity(available ? 0.7 : 0.18),
+                            style: StrokeStyle(lineWidth: 1.1, lineCap: .round, lineJoin: .round))
+                    .frame(width: 12, height: 14)
+            } else {
+                RoundedRectangle(cornerRadius: 1.3)
+                    .fill(Self.ink.opacity(available ? 0.55 : 0.18))
+                    .frame(width: 7, height: 7)
+                    .rotationEffect(.degrees(45))
+            }
+        }
+        .frame(width: 23, height: 23)
+        .frame(width: 34, height: 34)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .ignore)
+    }
+
+    private struct CoinStack: Shape {
+        func path(in rect: CGRect) -> Path {
+            var path = Path()
+            path.addEllipse(in: CGRect(x: 1, y: 1, width: 10, height: 4))
+            path.move(to: CGPoint(x: 1, y: 3))
+            path.addLine(to: CGPoint(x: 1, y: 10.5))
+            path.addCurve(to: CGPoint(x: 11, y: 10.5),
+                          control1: CGPoint(x: 1, y: 13.5), control2: CGPoint(x: 11, y: 13.5))
+            path.addLine(to: CGPoint(x: 11, y: 3))
+            for y: CGFloat in [5.5, 8] {
+                path.move(to: CGPoint(x: 1, y: y))
+                path.addCurve(to: CGPoint(x: 11, y: y),
+                              control1: CGPoint(x: 1, y: y + 3), control2: CGPoint(x: 11, y: y + 3))
+            }
+            return path.applying(CGAffineTransform(scaleX: rect.width / 12, y: rect.height / 14))
+        }
+    }
+
+    private var allowanceDescription: String {
+        let limits = snapshot?.rateLimits
+        let unavailable = snapshot?.rateLimitsUnavailable == true
+        let stale = snapshot?.rateLimitsFetchedAt.map { date.timeIntervalSince($0) > 3 * UsageSnapshot.refreshInterval } ?? false
+        if unavailable { return "额度暂时无法读取" }
+        guard let limits else { return "额度暂无数据" }
+        let title = limits.source == .weekly ? "每周" : limits.label
+        return "\(title) · \(limits.value)\(stale ? " · 缓存数据" : "")"
+    }
+
+    private var allowanceTooltip: some View {
+        let limits = snapshot?.rateLimits
+        let title = limits?.source == .weekly ? "每周" : (limits?.label ?? "额度")
+        let unavailable = snapshot?.rateLimitsUnavailable == true
+        let stale = snapshot?.rateLimitsFetchedAt.map { date.timeIntervalSince($0) > 3 * UsageSnapshot.refreshInterval } ?? false
+        let value = unavailable ? "暂不可用" : (limits?.value ?? "暂无数据")
+        let bubble = RoundedRectangle(cornerRadius: 12)
+
+        return HStack(spacing: 0) {
+            Text(title).fontWeight(.semibold)
+            Text(" · \(value)\(stale && !unavailable ? "（缓存）" : "")").fontWeight(.regular)
+        }
+            .font(.system(size: 12))
+            .foregroundStyle(.white)
+            .monospacedDigit()
+            .lineLimit(1)
+            .padding(.horizontal, 12)
+            .frame(height: 30)
+            .background(Color(white: 0.17), in: bubble)
+            .overlay { bubble.strokeBorder(Color(white: 0.23), lineWidth: 1) }
+    }
+
+    private var allowanceDetails: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("当前使用：\(snapshot?.rateLimits?.label ?? "额度")")
+                .font(.system(size: 12))
+                .foregroundStyle(.white.opacity(0.55))
+            Rectangle().fill(.white.opacity(0.12)).frame(height: 1)
+            HStack {
+                Text(snapshot?.rateLimits?.label ?? "额度")
+                Spacer(minLength: 24)
+                Text(snapshot?.rateLimitsUnavailable == true ? "—" : (snapshot?.rateLimits?.value ?? "—"))
+                    .monospacedDigit()
+            }
+            .font(.system(size: 14))
+            .padding(10)
+            .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 9))
+        }
+        .padding(14)
+        .frame(width: 260)
+        .foregroundStyle(.white)
+        .background(Color(white: 0.16))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12).strokeBorder(.white.opacity(0.1), lineWidth: 1)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     private var bezel: some View {
@@ -77,12 +239,12 @@ struct LCDPanel: View {
                     RoundedRectangle(cornerRadius: 35)
                         .strokeBorder(.white.opacity(0.75), lineWidth: 1)
                 }
-                .frame(width: 328, height: 331)
-                .position(x: 173, y: 171.5)
+                .frame(width: 328, height: 328)
+                .position(x: 173, y: 173)
 
             RoundedRectangle(cornerRadius: 18)
                 .fill(.linearGradient(colors: [Color(white: 0.76), .white], startPoint: .top, endPoint: .bottom))
-                .frame(width: 303, height: 306)
+                .frame(width: 303, height: 303)
                 .position(x: 173, y: 173)
 
             RoundedRectangle(cornerRadius: 12)
@@ -111,7 +273,7 @@ struct LCDPanel: View {
                         )
                 }
                 .frame(width: Self.screenSize.width, height: Self.screenSize.height)
-                .position(x: 172, y: 173)
+                .position(x: 173, y: 173)
         }
         .accessibilityHidden(true)
     }
@@ -119,23 +281,24 @@ struct LCDPanel: View {
     private func rule(at y: CGFloat) -> some View {
         Rectangle()
             .fill(Self.divider)
-            .frame(width: 275, height: 0.65)
-            .position(x: 173, y: y)
+            .frame(width: Self.contentFrame.width, height: 0.65)
+            .position(x: Self.contentFrame.midX, y: y)
             .accessibilityHidden(true)
     }
 
     private var summary: some View {
         let stats = snapshot?.usage?.summary
+        let compactWidth = (Self.contentFrame.width - 69) / 4
         return HStack(spacing: 0) {
-            metric("累计 Token 数", TokenFormat.count(stats?.lifetimeTokens))
-            metric("Token 使用峰值", TokenFormat.count(stats?.peakDailyTokens), divided: true)
+            metric("累计 Token 数", TokenFormat.count(stats?.lifetimeTokens), width: compactWidth)
+            metric("Token 使用峰值", TokenFormat.count(stats?.peakDailyTokens), width: compactWidth, divided: true)
             metric("最长任务用时", TokenFormat.duration(stats?.longestRunningTurnSec), width: 69, divided: true)
-            metric("最长连续天数", TokenFormat.days(stats?.longestStreakDays), divided: true)
-            metric("当前连续天数", TokenFormat.days(stats?.currentStreakDays), divided: true)
+            metric("最长连续天数", TokenFormat.days(stats?.longestStreakDays), width: compactWidth, divided: true)
+            metric("当前连续天数", TokenFormat.days(stats?.currentStreakDays), width: compactWidth, divided: true)
         }
     }
 
-    private func metric(_ label: String, _ value: String, width: CGFloat = 51.5, divided: Bool = false) -> some View {
+    private func metric(_ label: String, _ value: String, width: CGFloat, divided: Bool = false) -> some View {
         VStack(spacing: 2) {
             Text(value)
                 .font(.system(size: 11, weight: .semibold))
@@ -144,6 +307,7 @@ struct LCDPanel: View {
             Text(label)
                 .font(.system(size: 6.4, weight: .medium))
                 .lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
         .padding(.horizontal, 2)
         .frame(width: width, height: 26)
@@ -158,19 +322,6 @@ struct LCDPanel: View {
     private func todayLabel(_ activity: ActivityCalendar) -> String {
         guard activity.todayTokens != nil else { return "今日 TOKENS" }
         return activity.todayIsLocal ? "今日 TOKENS · 本机" : "今日 TOKENS · 账户"
-    }
-
-    private func footer(todayIsLocal: Bool) -> String {
-        if isPreview { return "已更新 15:20 · 预览数据" }
-        let fetchedAt = todayIsLocal ? snapshot?.localFetchedAt ?? snapshot?.fetchedAt : snapshot?.fetchedAt
-        guard let fetchedAt else { return "打开 Codex Token 刷新" }
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "HH:mm"
-        let time = formatter.string(from: fetchedAt)
-        let stale = date.timeIntervalSince(fetchedAt) > 3 * UsageSnapshot.refreshInterval
-        let source = todayIsLocal ? "本机用量" : "账户用量"
-        return "已更新 \(time) · \(stale ? "缓存数据" : source)"
     }
 
     private struct SegmentReadout: View {

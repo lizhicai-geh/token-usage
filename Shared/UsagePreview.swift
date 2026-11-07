@@ -18,6 +18,12 @@ extension UsageSnapshot {
             currentStreakDays: 9,
             longestStreakDays: 12
         )
-        return Self(usage: AccountUsage(summary: summary, dailyUsageBuckets: buckets), fetchedAt: date)
+        let limits = AccountRateLimits(
+            rateLimits: .init(secondary: .init(usedPercent: 56, windowDurationMins: 10_080),
+                             credits: .init(hasCredits: true, unlimited: false, balance: "9702")),
+            ordinaryUsageAllowed: true
+        )
+        return Self(usage: AccountUsage(summary: summary, dailyUsageBuckets: buckets), fetchedAt: date,
+                    rateLimits: limits, rateLimitsFetchedAt: date)
     }
 }

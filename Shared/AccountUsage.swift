@@ -37,7 +37,7 @@ struct ActivityCalendar {
     let peak: UInt64
 
     init(usage: AccountUsage?, localToday: AccountUsage.DailyBucket? = nil, preferLocalToday: Bool = false,
-         date: Date, calendar: Calendar = .localGregorian) {
+         date: Date, calendar: Calendar = .localGregorian, includeHistory: Bool = false) {
         let tokensByDate = Dictionary(
             (usage?.dailyUsageBuckets ?? []).map { ($0.startDate, $0.tokens) },
             uniquingKeysWith: { _, latest in latest }
@@ -50,8 +50,15 @@ struct ActivityCalendar {
         todayTokens = todayIsLocal ? localTokens : accountTokens
 
         let daysSinceMonday = (calendar.component(.weekday, from: today) + 5) % 7
-        let firstOffset = -daysSinceMonday - (Self.weekCount - 1) * 7
-        weeks = (0..<Self.weekCount).map { week in
+        var visibleWeeks = Self.weekCount
+        if includeHistory,
+           let firstDay = tokensByDate.keys.compactMap({ calendar.usageDate(from: $0) }).filter({ $0 <= today }).min(),
+           let elapsedDays = calendar.dateComponents([.day], from: firstDay, to: today).day {
+            let firstWeekday = (calendar.component(.weekday, from: firstDay) + 5) % 7
+            visibleWeeks = max(visibleWeeks, (elapsedDays + firstWeekday - daysSinceMonday) / 7 + 1)
+        }
+        let firstOffset = -daysSinceMonday - (visibleWeeks - 1) * 7
+        weeks = (0..<visibleWeeks).map { week in
             let days = (0..<7).compactMap { weekday in
                 calendar.date(byAdding: .day, value: firstOffset + week * 7 + weekday, to: today)
             }.map { day in
@@ -76,6 +83,15 @@ extension Calendar {
     func usageDateKey(for date: Date) -> String {
         let day = dateComponents([.year, .month, .day], from: date)
         return String(format: "%04d-%02d-%02d", day.year ?? 0, day.month ?? 0, day.day ?? 0)
+    }
+
+    func usageDate(from key: String) -> Date? {
+        let parts = key.split(separator: "-")
+        guard parts.count == 3, let year = Int(parts[0]), year > 0,
+              let month = Int(parts[1]), let day = Int(parts[2]),
+              let date = date(from: DateComponents(year: year, month: month, day: day)),
+              usageDateKey(for: date) == key else { return nil }
+        return startOfDay(for: date)
     }
 }
 

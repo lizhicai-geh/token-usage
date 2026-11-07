@@ -7,6 +7,9 @@ struct UsageSnapshot: Codable, Sendable {
     var localToday: AccountUsage.DailyBucket?
     var localFetchedAt: Date?
     var accountUnavailable: Bool?
+    var rateLimits: AccountRateLimits?
+    var rateLimitsFetchedAt: Date?
+    var rateLimitsUnavailable: Bool?
 
     static let widgetKind = "dev.codextoken.usage"
     static let refreshInterval: TimeInterval = 15 * 60

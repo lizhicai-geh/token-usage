@@ -19,7 +19,8 @@ private struct CodexTokenWindow: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            LCDPanel(snapshot: controller.snapshot, date: .now, activityInteraction: .hover($controller.selectedActivityDay))
+            LCDPanel(snapshot: controller.snapshot, date: .now,
+                     activityInteraction: .hover($controller.selectedActivityDay), allowsAllowancePopover: true)
                 .frame(width: 346, height: 346)
 
             if let error = controller.errorMessage {

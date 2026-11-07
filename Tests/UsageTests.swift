@@ -27,21 +27,83 @@ enum UsageTests {
         try check(ActivityCalendar(usage: usage, date: nextDay, calendar: calendar).todayTokens == 900_000, "跨天读取新日期")
         let empty = try JSONDecoder().decode(AccountUsage.self, from: Data(#"{"summary":{},"dailyUsageBuckets":null}"#.utf8))
         try check(ActivityCalendar(usage: empty, date: date, calendar: calendar).todayTokens == nil, "缺失数据不显示成零")
+        try checkActivityHistory(usage: usage, empty: empty, date: date, calendar: calendar)
         try checkLocalUsage(account: usage, emptyAccount: empty, date: date, calendar: calendar)
         try check(TokenFormat.lcd(128_600) == .init(digits: "128.6", unit: "K"), "主显示匹配参考格式")
         try check(TokenFormat.lcd(999_999) == .init(digits: "1.0", unit: "M"), "四舍五入后进位")
         try check(TokenFormat.count(36_320_000_000) == "363.2亿", "累计量使用中文单位")
         try check(TokenFormat.duration(80_640) == "22 小时 24 分", "最长任务按时分显示")
+        try checkRateLimits()
 
         let executable = URL(fileURLWithPath: CommandLine.arguments[0])
         let client = AppServerClient(executable: executable)
         let read = try client.readUsage()
         try check(read == usage, "完整 RPC 握手并跳过异步通知")
+        let limits = try client.readRateLimits()
+        try check(limits.source == .weekly && limits.value == "剩余 44%", "额度接口完成握手并读取周额度")
         try expectFailure("invalid", executable: executable, .invalidResponse)
         try expectFailure("error", executable: executable, .rpc(code: -32601, message: "Method not found"))
         try expectFailure("timeout", executable: executable, .timeout)
         try await checkIndependentRefresh(account: usage)
-        print("用量、热力图、格式和 App Server RPC 测试通过")
+        try await checkRateLimitsRefresh(account: usage)
+        print("用量、热力图、额度切换、独立刷新和 App Server RPC 测试通过")
+    }
+
+    private static func checkActivityHistory(usage: AccountUsage, empty: AccountUsage, date: Date, calendar: Calendar) throws {
+        let historical = AccountUsage(summary: usage.summary, dailyUsageBuckets: (usage.dailyUsageBuckets ?? []) + [
+            .init(startDate: "2024-12-31", tokens: 0),
+            .init(startDate: "2025-01-01", tokens: 5_000_000),
+            .init(startDate: "2020-02-31", tokens: 99_000_000),
+            .init(startDate: "2030-01-01", tokens: 99_000_000)
+        ])
+        let history = ActivityCalendar(usage: historical, date: date, calendar: calendar, includeHistory: true)
+        let days = history.weeks.flatMap(\.days)
+        try check(history.weeks.count > 27, "App 热图包含超过 27 周的历史")
+        try check(days.first.map { calendar.usageDateKey(for: $0.date) } == "2024-12-30", "最早历史周从周一开始，跨年不丢失日期")
+        try check(days.first { calendar.usageDateKey(for: $0.date) == "2024-12-31" }?.tokens == 0, "历史记录保留明确的零")
+        try check(history.peak == 5_000_000, "历史颜色范围包含旧记录，排除未来和无效日期")
+        try check(history.todayTokens == 128_600 && history.weeks.last?.days.map(\.tokens) == ActivityCalendar(usage: usage, date: date, calendar: calendar).weeks.last?.days.map(\.tokens), "扩展历史不影响今日数据和最新一周")
+        try check(ActivityCalendar(usage: historical, date: date, calendar: calendar).weeks.count == 27, "桌面小组件仍只展示最近 27 周")
+        try check(ActivityCalendar(usage: empty, date: date, calendar: calendar, includeHistory: true).weeks.count == 27, "缺失历史时保留最近 27 周")
+        try check(calendar.usageDate(from: "2026-02-30") == nil && calendar.usageDate(from: "2026-2-03") == nil, "无效及非规范日期不能扩展历史范围")
+        try check(calendar.usageDate(from: "2024-02-29").map { calendar.usageDateKey(for: $0) } == "2024-02-29", "闰日可以用于历史定位")
+    }
+
+    private static func checkRateLimits() throws {
+        var limits = try JSONDecoder().decode(AccountRateLimits.self, from: Data(rateLimitsPayload.utf8))
+        try check(limits.source == .weekly && limits.label == "周额度" && limits.value == "剩余 44%", "有积分余额但仍在使用套餐时显示周额度")
+        limits.ordinaryUsageAllowed = false
+        try check(limits.source == .credits && limits.label == "积分" && limits.value == "9,702", "服务端禁止套餐用量时显示积分余额")
+        limits.rateLimits.secondary?.usedPercent = 100
+        limits.ordinaryUsageAllowed = true
+        try check(limits.source == .weekly && limits.value == "剩余 0%", "服务端套餐状态优先于旧窗口百分比")
+        limits.ordinaryUsageAllowed = nil
+        try check(limits.source == .credits, "旧版服务端在周额度耗尽时切换积分")
+        limits.rateLimits.secondary?.usedPercent = 56
+        limits.rateLimits.primary = .init(usedPercent: 100, windowDurationMins: 300)
+        try check(limits.source == .credits, "短期额度耗尽但周额度尚有剩余时也显示积分")
+        limits.rateLimits.primary?.usedPercent = 10
+        try check(limits.source == .weekly, "套餐额度恢复后切回周额度")
+        limits.rateLimitsByLimitId = ["codex": .init(primary: .init(usedPercent: 20, windowDurationMins: 10_080))]
+        try check(limits.value == "剩余 80%", "优先选择 codex 桶，按窗口长度识别周额度")
+        limits.rateLimitsByLimitId = nil
+        limits.ordinaryUsageAllowed = false
+        limits.rateLimits.credits?.balance = "9702.25"
+        try check(limits.value == "9,702.25", "积分保留小数并添加千位分隔")
+        limits.rateLimits.credits?.unlimited = true
+        try check(limits.value == "不限量", "不限量积分不显示伪造余额")
+        limits.rateLimits.credits = .init(hasCredits: false, unlimited: false)
+        try check(limits.value == "0", "明确无积分时显示零")
+        limits.rateLimits.credits = .init(hasCredits: true, unlimited: false)
+        try check(limits.value == "—", "积分余额缺失时保留未知状态")
+        limits.rateLimits.credits = nil
+        try check(limits.source == .unknown && limits.value == "—", "额度来源无法判断时不误报周额度")
+
+        let legacySnapshot = try JSONDecoder().decode(UsageSnapshot.self, from: Data(#"{"accountUnavailable":false}"#.utf8))
+        try check(legacySnapshot.rateLimits == nil, "旧版快照无需迁移即可读取")
+        let snapshot = UsageSnapshot(rateLimits: limits, rateLimitsFetchedAt: .now)
+        let restored = try JSONDecoder().decode(UsageSnapshot.self, from: JSONEncoder().encode(snapshot))
+        try check(restored.rateLimits == limits, "小组件快照保留额度与来源状态")
     }
 
     private static func checkLocalUsage(account: AccountUsage, emptyAccount: AccountUsage, date: Date, calendar: Calendar) throws {
@@ -111,12 +173,15 @@ enum UsageTests {
             snapshot: UsageSnapshot(usage: cachedAccount, fetchedAt: now.addingTimeInterval(-60)),
             readAccount: { try await gate.read() },
             readLocal: { .init(startDate: today, tokens: 321) },
+            readRateLimits: { try JSONDecoder().decode(AccountRateLimits.self, from: Data(rateLimitsPayload.utf8)) },
             publish: { saved = $0 }
         )
         let pending = Task { await controller.refreshAccount() }
         await gate.waitForRequest()
+        await controller.refreshRateLimits()
         await controller.refreshLocal()
         try check(saved?.localToday?.tokens == 321 && saved?.usage == cachedAccount, "账户请求挂起时本机数据独立写入，保留历史账户数据")
+        try check(saved?.rateLimits?.value == "剩余 44%", "Token 查询挂起不阻塞额度刷新")
         await gate.finish(.failure(AppServerError.timeout))
         await pending.value
         try check(saved?.localToday?.tokens == 321 && saved?.accountUnavailable == true, "账户超时后保留本机数据")
@@ -135,6 +200,30 @@ enum UsageTests {
             date: now, calendar: .localGregorian
         )
         try check(displayed.todayTokens == 900 && !displayed.todayIsLocal && updated.localToday?.tokens == 321, "账户数据回来自动切换来源")
+    }
+
+    @MainActor
+    private static func checkRateLimitsRefresh(account: AccountUsage) async throws {
+        let limits = try JSONDecoder().decode(AccountRateLimits.self, from: Data(rateLimitsPayload.utf8))
+        var saved: UsageSnapshot?
+        let controller = UsageController(
+            snapshot: UsageSnapshot(usage: account, rateLimits: limits),
+            readAccount: { account }, readLocal: { nil },
+            readRateLimits: { throw AppServerError.rpc(code: -32601, message: "Method not found") },
+            publish: { saved = $0 }
+        )
+        await controller.refreshRateLimits()
+        await controller.refreshAccount()
+        try check(saved?.usage == account && saved?.accountUnavailable == false, "额度查询失败不影响 Token 查询")
+        try check(saved?.rateLimits == limits && saved?.rateLimitsUnavailable == true, "额度失败保留快照并标记不可用")
+        try check(controller.errorMessage?.contains("额度查询失败") == true, "额度失败展示可识别错误")
+
+        let recovered = UsageController(
+            snapshot: saved, readAccount: { account }, readLocal: { nil }, readRateLimits: { limits },
+            publish: { saved = $0 }
+        )
+        await recovered.refreshRateLimits()
+        try check(saved?.rateLimitsUnavailable == false && recovered.errorMessage == nil, "额度查询恢复后解除不可用状态")
     }
 
     private actor AccountGate {
@@ -193,14 +282,15 @@ enum UsageTests {
         let initialized = try request()
         try check(initialized["id"] == nil && initialized["method"] as? String == "initialized", "发送初始化完成通知")
         let read = try request()
-        try check(read["id"] as? Int == 2 && read["method"] as? String == "account/usage/read" && read["params"] == nil, "读取账户用量")
+        let method = read["method"] as? String
+        try check(read["id"] as? Int == 2 && ["account/usage/read", "account/rateLimits/read"].contains(method) && read["params"] == nil, "读取账户用量或额度")
         switch ProcessInfo.processInfo.environment["TEST_SERVER_MODE"] {
         case "invalid": reply(#"{"id":2,"result":{"dailyUsageBuckets":[]}}"#)
         case "error": reply(#"{"id":2,"error":{"code":-32601,"message":"Method not found"}}"#)
         case "timeout": Thread.sleep(forTimeInterval: 5)
         default:
             reply(#"{"id":77,"result":{}}"#)
-            reply("{\"id\":2,\"result\":\(Self.payload)}")
+            reply("{\"id\":2,\"result\":\(method == "account/rateLimits/read" ? Self.rateLimitsPayload : Self.payload)}")
         }
     }
 
@@ -225,6 +315,8 @@ enum UsageTests {
     private struct Failure: Error {
         let message: String
     }
+
+    private static let rateLimitsPayload = #"{"rateLimits":{"limitId":"codex","primary":{"usedPercent":12,"windowDurationMins":300},"secondary":{"usedPercent":56,"windowDurationMins":10080},"credits":{"hasCredits":true,"unlimited":false,"balance":"9702"}},"ordinaryUsageAllowed":true}"#
 
     private static let payload = #"{"summary":{"lifetimeTokens":36320000000,"peakDailyTokens":5390000000,"longestRunningTurnSec":80640,"currentStreakDays":null,"longestStreakDays":12},"dailyUsageBuckets":[{"startDate":"2026-11-05","tokens":900000},{"startDate":"2026-11-04","tokens":128600},{"startDate":"2026-11-03","tokens":0}]}"#
 }

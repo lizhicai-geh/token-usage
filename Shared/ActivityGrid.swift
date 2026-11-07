@@ -1,3 +1,5 @@
+import AppKit
+import Combine
 import SwiftUI
 
 struct ActivityGrid: View {
@@ -11,14 +13,19 @@ struct ActivityGrid: View {
     let calendar: Calendar
     let ink: Color
     let interaction: Interaction
+    @State private var contentOffset: CGFloat = 0
+    @State private var hoverLocation: CGPoint?
 
-    private static let width: CGFloat = 273
+    private static let width: CGFloat = 266
     private static let height: CGFloat = 76
     private static let cellSide: CGFloat = 7.75
     private static let columnStep = width / CGFloat(ActivityCalendar.weekCount)
 
+    private var contentWidth: CGFloat { CGFloat(activity.weeks.count) * Self.columnStep }
+
     private struct Cell: Identifiable {
         let day: ActivityCalendar.Day
+        let column: Int
         let frame: CGRect
         var id: Date { day.date }
     }
@@ -27,7 +34,7 @@ struct ActivityGrid: View {
         let cells = activity.weeks.enumerated().flatMap { column, week in
             week.days.enumerated().compactMap { row, day -> Cell? in
                 guard !day.isFuture else { return nil }
-                return Cell(day: day, frame: CGRect(
+                return Cell(day: day, column: column, frame: CGRect(
                     x: CGFloat(column) * Self.columnStep, y: 16 + CGFloat(row) * 8.75,
                     width: Self.cellSide, height: Self.cellSide
                 ))
@@ -36,24 +43,48 @@ struct ActivityGrid: View {
         switch interaction {
         case .hover(let selection):
             let selected = cells.first { $0.id == selection.wrappedValue }
-            let selectAt: (CGPoint) -> Void = { location in
-                let day = cells.first { $0.frame.contains(location) }?.id
+            let selectAt: (CGPoint, CGFloat) -> Void = { location, offset in
+                let point = CGPoint(x: location.x - offset, y: location.y)
+                let day = cells.first { $0.frame.contains(point) }?.id
                 if selection.wrappedValue != day { selection.wrappedValue = day }
             }
-            grid(cells, selected: selected?.id)
-                .contentShape(Rectangle())
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal) {
+                    grid(cells, selected: selected?.id)
+                        .background {
+                            ScrollOffsetObserver { offset in
+                                contentOffset = offset
+                                if let hoverLocation { selectAt(hoverLocation, offset) }
+                            }
+                        }
+                }
+                .scrollIndicators(.hidden)
+                .defaultScrollAnchor(.trailing)
+                .frame(width: Self.width, height: Self.height)
                 .onContinuousHover { phase in
                     switch phase {
                     case .active(let location):
-                        selectAt(location)
+                        hoverLocation = location
+                        selectAt(location, contentOffset)
                     case .ended:
+                        hoverLocation = nil
                         if selection.wrappedValue != nil { selection.wrappedValue = nil }
                     }
                 }
-                .onTapGesture { location in selectAt(location) }
+                .onTapGesture { location in selectAt(location, contentOffset) }
                 .overlay(alignment: .topLeading) {
-                    if let selected { tooltip(for: selected) }
+                    if let selected, isVisible(selected) { tooltip(for: selected, offset: contentOffset) }
                 }
+                .onAppear {
+                    if let selected { proxy.scrollTo(selected.column, anchor: .center) }
+                }
+                .onChange(of: selection.wrappedValue) { _, day in
+                    if let cell = cells.first(where: { $0.id == day }), !isVisible(cell) {
+                        proxy.scrollTo(cell.column, anchor: .center)
+                    }
+                }
+                .accessibilityHint("左右滚动查看历史记录，悬停查看每日用量")
+            }
         case .none, .widgetLinks:
             grid(cells, selected: nil)
         }
@@ -71,14 +102,22 @@ struct ActivityGrid: View {
             }
             .accessibilityHidden(true)
 
-            ForEach(cells) { cell in
-                cellView(cell, isSelected: selected == cell.id)
-                    .position(x: cell.frame.midX, y: cell.frame.midY)
+            HStack(spacing: 0) {
+                ForEach(activity.weeks.indices, id: \.self) { column in
+                    ZStack(alignment: .topLeading) {
+                        ForEach(cells.filter { $0.column == column }) { cell in
+                            cellView(cell, isSelected: selected == cell.id)
+                                .position(x: Self.cellSide / 2, y: cell.frame.midY)
+                        }
+                    }
+                    .frame(width: Self.columnStep, height: Self.height)
+                    .id(column)
+                }
             }
         }
-        .frame(width: Self.width, height: Self.height)
+        .frame(width: contentWidth, height: Self.height)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("最近 \(ActivityCalendar.weekCount) 周 Token 活动")
+        .accessibilityLabel("最近 \(activity.weeks.count) 周 Token 活动")
     }
 
     @ViewBuilder
@@ -103,10 +142,14 @@ struct ActivityGrid: View {
         }
     }
 
-    private func tooltip(for cell: Cell) -> some View {
+    private func isVisible(_ cell: Cell) -> Bool {
+        cell.frame.maxX + contentOffset > 0 && cell.frame.minX + contentOffset < Self.width
+    }
+
+    private func tooltip(for cell: Cell, offset: CGFloat) -> some View {
         let width: CGFloat = 114
         let height: CGFloat = 44
-        let left = min(max(0, cell.frame.midX), Self.width - width)
+        let left = min(max(0, cell.frame.midX + offset), Self.width - width)
         let bubble = RoundedRectangle(cornerRadius: 15)
         return VStack(alignment: .leading, spacing: 2) {
             Text(dateLabel(cell.day))
@@ -126,7 +169,7 @@ struct ActivityGrid: View {
     }
 
     private func dateLabel(_ day: ActivityCalendar.Day) -> String {
-        "\(calendar.component(.month, from: day.date))月\(calendar.component(.day, from: day.date))日"
+        "\(calendar.component(.year, from: day.date))年\(calendar.component(.month, from: day.date))月\(calendar.component(.day, from: day.date))日"
     }
 
     private func tokenLabel(_ day: ActivityCalendar.Day) -> String {
@@ -140,6 +183,49 @@ struct ActivityGrid: View {
         case ..<0.25: return 0.46
         case ..<0.60: return 0.62
         default: return 0.82
+        }
+    }
+}
+
+// Read the clip view's bounds so hover hit testing and external date navigation
+// share the actual scroll position, including on macOS 14.
+private struct ScrollOffsetObserver: NSViewRepresentable {
+    let onChange: (CGFloat) -> Void
+
+    func makeNSView(context: Context) -> ObserverView {
+        let view = ObserverView()
+        view.onChange = onChange
+        return view
+    }
+
+    func updateNSView(_ view: ObserverView, context: Context) { view.onChange = onChange }
+
+    final class ObserverView: NSView {
+        var onChange: ((CGFloat) -> Void)?
+        private var observation: AnyCancellable?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            observation = nil
+            guard window != nil else { return }
+            DispatchQueue.main.async { [weak self] in self?.observeScroll() }
+        }
+
+        private func observeScroll() {
+            guard let clip = enclosingScrollView?.contentView else { return }
+            clip.postsBoundsChangedNotifications = true
+            observation = NotificationCenter.default.publisher(for: NSView.boundsDidChangeNotification, object: clip)
+                .sink { [weak self, weak clip] _ in
+                    MainActor.assumeIsolated {
+                        guard let clip else { return }
+                        self?.report(-clip.bounds.minX)
+                    }
+                }
+            report(-clip.bounds.minX)
+        }
+
+        private func report(_ offset: CGFloat) {
+            DispatchQueue.main.async { [weak self] in self?.onChange?(offset) }
         }
     }
 }

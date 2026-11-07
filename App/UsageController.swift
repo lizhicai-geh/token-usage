@@ -8,16 +8,19 @@ final class UsageController: NSObject, NSApplicationDelegate, ObservableObject {
     @Published var selectedActivityDay: Date?
     @Published private var localError: String?
     @Published private var accountError: String?
+    @Published private var rateLimitsError: String?
     @Published private var isRefreshingLocal = false
     @Published private var isRefreshingAccount = false
+    @Published private var isRefreshingRateLimits = false
 
     private let readAccount: @Sendable () async throws -> AccountUsage
+    private let readRateLimits: @Sendable () async throws -> AccountRateLimits
     private let readLocal: @Sendable () async throws -> AccountUsage.DailyBucket?
     private let publish: (UsageSnapshot) throws -> Void
     private var refreshLoops: [Task<Void, Never>] = []
 
-    var isRefreshing: Bool { isRefreshingLocal || isRefreshingAccount }
-    var errorMessage: String? { localError ?? accountError }
+    var isRefreshing: Bool { isRefreshingLocal || isRefreshingAccount || isRefreshingRateLimits }
+    var errorMessage: String? { localError ?? accountError ?? rateLimitsError }
 
     override convenience init() {
         self.init(
@@ -32,6 +35,11 @@ final class UsageController: NSObject, NSApplicationDelegate, ObservableObject {
                     try LocalUsage.readToday()
                 }.value
             },
+            readRateLimits: {
+                try await Task.detached(priority: .utility) {
+                    try AppServerClient.installed().readRateLimits()
+                }.value
+            },
             publish: { snapshot in
                 try snapshot.save()
                 WidgetCenter.shared.reloadTimelines(ofKind: UsageSnapshot.widgetKind)
@@ -41,15 +49,17 @@ final class UsageController: NSObject, NSApplicationDelegate, ObservableObject {
 
     init(snapshot: UsageSnapshot?, readAccount: @escaping @Sendable () async throws -> AccountUsage,
          readLocal: @escaping @Sendable () async throws -> AccountUsage.DailyBucket?,
+         readRateLimits: @escaping @Sendable () async throws -> AccountRateLimits,
          publish: @escaping (UsageSnapshot) throws -> Void) {
         self.snapshot = snapshot
         self.readAccount = readAccount
         self.readLocal = readLocal
+        self.readRateLimits = readRateLimits
         self.publish = publish
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        refreshLoops = [poll(refreshLocal), poll(refreshAccount)]
+        refreshLoops = [poll(refreshLocal), poll(refreshAccount), poll(refreshRateLimits)]
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -59,7 +69,8 @@ final class UsageController: NSObject, NSApplicationDelegate, ObservableObject {
     func refresh() async {
         async let local: Void = refreshLocal()
         async let account: Void = refreshAccount()
-        _ = await (local, account)
+        async let rateLimits: Void = refreshRateLimits()
+        _ = await (local, account, rateLimits)
     }
 
     func refreshLocal() async {
@@ -104,6 +115,27 @@ final class UsageController: NSObject, NSApplicationDelegate, ObservableObject {
             accountError = nil
         } catch {
             accountError = error.localizedDescription
+        }
+    }
+
+    func refreshRateLimits() async {
+        guard !isRefreshingRateLimits else { return }
+        isRefreshingRateLimits = true
+        defer { isRefreshingRateLimits = false }
+
+        do {
+            let limits = try await readRateLimits()
+            try updateSnapshot {
+                $0.rateLimits = limits
+                $0.rateLimitsFetchedAt = .now
+                $0.rateLimitsUnavailable = false
+            }
+            rateLimitsError = nil
+        } catch {
+            rateLimitsError = "额度查询失败：\(error.localizedDescription)"
+            if snapshot?.rateLimitsUnavailable != true {
+                try? updateSnapshot { $0.rateLimitsUnavailable = true }
+            }
         }
     }
 
