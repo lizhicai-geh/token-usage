@@ -5,8 +5,6 @@ struct LCDPanel: View {
     let date: Date
     var isPreview = false
     var activityInteraction: ActivityGrid.Interaction = .none
-    var allowsAllowancePopover = false
-    @State private var showsAllowanceDetails = false
     @State private var isHoveringAllowance = false
 
     private static let side: CGFloat = 346
@@ -91,30 +89,19 @@ struct LCDPanel: View {
     }
 
     private var allowance: some View {
-        Group {
-            if allowsAllowancePopover {
-                Button { showsAllowanceDetails.toggle() } label: { allowanceRing }
-                    .buttonStyle(.plain)
-                    .popover(isPresented: $showsAllowanceDetails, arrowEdge: .bottom) {
-                        allowanceDetails
-                    }
-            } else {
-                allowanceRing
-                    .help(allowanceDescription)
+        allowanceRing
+            .onHover { isHoveringAllowance = $0 }
+            .overlay(alignment: .trailing) {
+                if isHoveringAllowance {
+                    allowanceTooltip
+                        .fixedSize()
+                        .offset(x: -42)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
             }
-        }
-        .onHover { isHoveringAllowance = $0 }
-        .overlay(alignment: .trailing) {
-            if isHoveringAllowance && !showsAllowanceDetails {
-                allowanceTooltip
-                    .fixedSize()
-                    .offset(x: -42)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-            }
-        }
-        .accessibilityLabel("当前使用\(snapshot?.rateLimits?.label ?? "额度")")
-        .accessibilityValue(allowanceDescription)
+            .accessibilityLabel("当前使用\(snapshot?.rateLimits?.label ?? "额度")")
+            .accessibilityValue(allowanceDescription)
     }
 
     private var allowanceRing: some View {
@@ -203,32 +190,6 @@ struct LCDPanel: View {
             .frame(height: 30)
             .background(Color(white: 0.17), in: bubble)
             .overlay { bubble.strokeBorder(Color(white: 0.23), lineWidth: 1) }
-    }
-
-    private var allowanceDetails: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("当前使用：\(snapshot?.rateLimits?.label ?? "额度")")
-                .font(.system(size: 12))
-                .foregroundStyle(.white.opacity(0.55))
-            Rectangle().fill(.white.opacity(0.12)).frame(height: 1)
-            HStack {
-                Text(snapshot?.rateLimits?.label ?? "额度")
-                Spacer(minLength: 24)
-                Text(snapshot?.rateLimitsUnavailable == true ? "—" : (snapshot?.rateLimits?.value ?? "—"))
-                    .monospacedDigit()
-            }
-            .font(.system(size: 14))
-            .padding(10)
-            .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 9))
-        }
-        .padding(14)
-        .frame(width: 260)
-        .foregroundStyle(.white)
-        .background(Color(white: 0.16))
-        .overlay {
-            RoundedRectangle(cornerRadius: 12).strokeBorder(.white.opacity(0.1), lineWidth: 1)
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     private var bezel: some View {
