@@ -4,6 +4,7 @@ struct LCDPanel: View {
     let snapshot: UsageSnapshot?
     let date: Date
     var isPreview = false
+    var compactBezel = false
     var activityInteraction: ActivityGrid.Interaction = .none
     @State private var isHoveringAllowance = false
 
@@ -41,6 +42,18 @@ struct LCDPanel: View {
 
         return ZStack(alignment: .topLeading) {
             bezel
+            screenContent(activity: activity, day: day, readout: readout)
+                .frame(width: Self.side, height: Self.side)
+                // Leave a 12-point bezel in widgets; retain the app's 28-point bezel.
+                .scaleEffect(compactBezel ? (Self.side - 24) / Self.screenSize.width : 1)
+        }
+        .foregroundStyle(Self.ink)
+    }
+
+    private func screenContent(activity: ActivityCalendar, day: String, readout: TokenFormat.Readout) -> some View {
+        let calendar = Calendar.localGregorian
+        return ZStack(alignment: .topLeading) {
+            screen
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(day)")
                     .font(.system(size: 10, weight: .semibold, design: .monospaced))
@@ -200,43 +213,46 @@ struct LCDPanel: View {
                     RoundedRectangle(cornerRadius: 35)
                         .strokeBorder(.white.opacity(0.75), lineWidth: 1)
                 }
-                .frame(width: 328, height: 328)
+                .frame(width: compactBezel ? 338 : 328, height: compactBezel ? 338 : 328)
                 .position(x: 173, y: 173)
 
             RoundedRectangle(cornerRadius: 18)
                 .fill(.linearGradient(colors: [Color(white: 0.76), .white], startPoint: .top, endPoint: .bottom))
-                .frame(width: 303, height: 303)
-                .position(x: 173, y: 173)
-
-            RoundedRectangle(cornerRadius: 12)
-                .fill(
-                    .linearGradient(
-                        colors: [Color(red: 0.56, green: 0.58, blue: 0.56), Color(red: 0.60, green: 0.61, blue: 0.58)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .overlay {
-                    Canvas { context, size in
-                        var lines = Path()
-                        for row in 0..<Int(size.height / 2) {
-                            lines.addRect(CGRect(x: 0, y: CGFloat(row) * 2, width: size.width, height: 0.45))
-                        }
-                        context.fill(lines, with: .color(.black.opacity(0.026)))
-                    }
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                }
-                .overlay {
-                    RoundedRectangle(cornerRadius: 12)
-                        .strokeBorder(
-                            .linearGradient(colors: [.black.opacity(0.50), .black.opacity(0.26), .white.opacity(0.45)], startPoint: .topLeading, endPoint: .bottomTrailing),
-                            lineWidth: 1.3
-                        )
-                }
-                .frame(width: Self.screenSize.width, height: Self.screenSize.height)
+                .frame(width: compactBezel ? 330 : 303, height: compactBezel ? 330 : 303)
                 .position(x: 173, y: 173)
         }
         .accessibilityHidden(true)
+    }
+
+    private var screen: some View {
+        RoundedRectangle(cornerRadius: 12)
+            .fill(
+                .linearGradient(
+                    colors: [Color(red: 0.56, green: 0.58, blue: 0.56), Color(red: 0.60, green: 0.61, blue: 0.58)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay {
+                Canvas { context, size in
+                    var lines = Path()
+                    for row in 0..<Int(size.height / 2) {
+                        lines.addRect(CGRect(x: 0, y: CGFloat(row) * 2, width: size.width, height: 0.45))
+                    }
+                    context.fill(lines, with: .color(.black.opacity(0.026)))
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(
+                        .linearGradient(colors: [.black.opacity(0.50), .black.opacity(0.26), .white.opacity(0.45)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                        lineWidth: 1.3
+                    )
+            }
+            .frame(width: Self.screenSize.width, height: Self.screenSize.height)
+            .position(x: 173, y: 173)
+            .accessibilityHidden(true)
     }
 
     private func rule(at y: CGFloat) -> some View {

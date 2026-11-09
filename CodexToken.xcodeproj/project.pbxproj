@@ -36,7 +36,7 @@
 
 /* Begin PBXFileReference section */
 		C0DE00000000000000000003 /* CodexTokenWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CodexTokenWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-		C0DE00000000000000000004 /* Codex Token.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Codex Token.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		C0DE00000000000000000004 /* Token Usage.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Token Usage.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -77,7 +77,7 @@
 		C0DE0000000000000000000A /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				C0DE00000000000000000004 /* Codex Token.app */,
+				C0DE00000000000000000004 /* Token Usage.app */,
 				C0DE00000000000000000003 /* CodexTokenWidget.appex */,
 			);
 			name = Products;
@@ -104,8 +104,8 @@
 				C0DE00000000000000000007 /* Shared */,
 			);
 			name = CodexToken;
-			productName = "Codex Token";
-			productReference = C0DE00000000000000000004 /* Codex Token.app */;
+			productName = "Token Usage";
+			productReference = C0DE00000000000000000004 /* Token Usage.app */;
 			productType = "com.apple.product-type.application";
 		};
 		C0DE0000000000000000000E /* CodexTokenWidget */ = {
@@ -247,7 +247,7 @@
 				ENABLE_APP_SANDBOX = NO;
 				INFOPLIST_FILE = "Config/App-Info.plist";
 				PRODUCT_BUNDLE_IDENTIFIER = dev.codextoken.app;
-				PRODUCT_NAME = "Codex Token";
+				PRODUCT_NAME = "Token Usage";
 			};
 			name = Local;
 		};

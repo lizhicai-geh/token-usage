@@ -15,7 +15,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "C0DE0000000000000000000D"
-               BuildableName = "Codex Token.app"
+               BuildableName = "Token Usage.app"
                BlueprintName = "CodexToken"
                ReferencedContainer = "container:CodexToken.xcodeproj">
             </BuildableReference>
@@ -44,7 +44,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "C0DE0000000000000000000D"
-            BuildableName = "Codex Token.app"
+            BuildableName = "Token Usage.app"
             BlueprintName = "CodexToken"
             ReferencedContainer = "container:CodexToken.xcodeproj">
          </BuildableReference>

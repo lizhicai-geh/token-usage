@@ -1,0 +1,23 @@
+#!/bin/bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+xcodebuild -project CodexToken.xcodeproj -scheme CodexToken \
+  -destination 'platform=macOS' -derivedDataPath .build/xcode build
+
+product='.build/xcode/Build/Products/Local/Token Usage.app'
+icon=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' "$product/Contents/Info.plist")
+test -s "$product/Contents/Resources/${icon%.icns}.icns"
+
+mkdir -p dist
+/usr/bin/ditto "$product" 'dist/Token Usage.app'
+/usr/bin/touch 'dist/Token Usage.app'
+
+# Xcode registers the build product automatically. Keep only the dist copy registered.
+lsregister='/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister'
+extension='Contents/PlugIns/CodexTokenWidget.appex'
+/usr/bin/pluginkit -r "$PWD/$product/$extension"
+"$lsregister" -u "$PWD/$product"
+"$lsregister" -f "$PWD/dist/Token Usage.app"
+/usr/bin/pluginkit -a "$PWD/dist/Token Usage.app/$extension"
+printf '已更新：%s/dist/Token Usage.app\n' "$PWD"

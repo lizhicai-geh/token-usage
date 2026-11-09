@@ -6,12 +6,12 @@ struct CodexTokenWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: UsageSnapshot.widgetKind, provider: UsageProvider()) { entry in
             LCDPanel(
-                snapshot: entry.snapshot, date: entry.date, isPreview: entry.isPreview,
+                snapshot: entry.snapshot, date: entry.date, isPreview: entry.isPreview, compactBezel: true,
                 activityInteraction: entry.isPreview ? .none : .widgetLinks
             )
                 .containerBackground(for: .widget) { Color(white: 0.96) }
         }
-        .configurationDisplayName("Codex Token")
+        .configurationDisplayName("Token Usage")
         .description("以液晶仪表查看今日 Token、每日活动和账户统计。")
         .supportedFamilies([.systemLarge])
         .contentMarginsDisabled()

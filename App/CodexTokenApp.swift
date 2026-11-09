@@ -5,7 +5,7 @@ struct CodexTokenApp: App {
     @NSApplicationDelegateAdaptor(UsageController.self) private var controller
 
     var body: some Scene {
-        WindowGroup("Codex Token") {
+        WindowGroup("Token Usage") {
             CodexTokenWindow(controller: controller)
         }
         .handlesExternalEvents(matching: [ActivityDayLink.route])
@@ -42,7 +42,7 @@ private struct CodexTokenWindow: View {
                 }
             }
 
-            Text("在桌面编辑小组件，选择 Codex Token 的大尺寸。")
+            Text("在桌面编辑小组件，选择 Token Usage 的大尺寸。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
