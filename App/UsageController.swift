@@ -123,8 +123,18 @@ final class UsageController: NSObject, NSApplicationDelegate, ObservableObject {
         isRefreshingRateLimits = true
         defer { isRefreshingRateLimits = false }
 
+        let limits: AccountRateLimits
         do {
-            let limits = try await readRateLimits()
+            limits = try await readRateLimits()
+        } catch {
+            rateLimitsError = "额度查询失败：\(error.localizedDescription)"
+            if snapshot?.rateLimitsUnavailable != true {
+                try? updateSnapshot { $0.rateLimitsUnavailable = true }
+            }
+            return
+        }
+
+        do {
             try updateSnapshot {
                 $0.rateLimits = limits
                 $0.rateLimitsFetchedAt = .now
@@ -132,10 +142,7 @@ final class UsageController: NSObject, NSApplicationDelegate, ObservableObject {
             }
             rateLimitsError = nil
         } catch {
-            rateLimitsError = "额度查询失败：\(error.localizedDescription)"
-            if snapshot?.rateLimitsUnavailable != true {
-                try? updateSnapshot { $0.rateLimitsUnavailable = true }
-            }
+            rateLimitsError = "额度保存失败：\(error.localizedDescription)"
         }
     }
 

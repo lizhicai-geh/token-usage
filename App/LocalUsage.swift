@@ -63,6 +63,8 @@ enum LocalUsage {
     }
 
     private struct Index: Codable, Equatable {
+        private static let tokenMarker = Data("\"token_count\"".utf8)
+
         let home: String
         let start: Date
         var cursors: [String: Cursor] = [:]
@@ -87,29 +89,45 @@ enum LocalUsage {
             }
             guard cursor.offset < size else { return }
             try handle.seek(toOffset: cursor.offset)
-            let data = try handle.read(upToCount: Int(size - cursor.offset)) ?? Data()
-            try consume(data, through: end, cursor: &cursor)
+            try consumeAppends(in: handle, byteCount: size - cursor.offset, through: end, cursor: &cursor)
             cursor.fingerprint = try Self.fingerprint(handle, before: cursor.offset)
             cursors[key] = cursor
         }
 
-        private mutating func consume(_ data: Data, through end: Date, cursor: inout Cursor) throws {
+        private mutating func consumeAppends(
+            in handle: FileHandle, byteCount: UInt64, through end: Date, cursor: inout Cursor
+        ) throws {
             let decoder = JSONDecoder()
-            let marker = Array("\"token_count\"".utf8)
-            try data.withUnsafeBytes { bytes in
-                // Keep an unfinished last line pending until Codex writes its newline.
-                for line in bytes.split(separator: 0x0a, omittingEmptySubsequences: false).dropLast() {
-                    if line.firstRange(of: marker) != nil,
-                       let reading = Reading.decode(Data(line), with: decoder) {
-                        guard reading.timestamp <= end else { break }
-                        if reading.timestamp >= start {
-                            try count(reading, previous: cursor.previousTotal)
-                        }
-                        cursor.previousTotal = reading.total
-                    }
-                    cursor.offset += UInt64(line.count) + 1
+            var remaining = byteCount
+            var pending = Data()
+            while remaining > 0,
+                  let chunk = try handle.read(upToCount: Int(min(remaining, 64 * 1_024))),
+                  !chunk.isEmpty {
+                remaining -= UInt64(chunk.count)
+                guard let newline = chunk.lastIndex(of: 0x0a) else {
+                    pending.append(chunk)
+                    continue
                 }
+                // Carry only the unfinished line forward. Its bytes stay outside the saved cursor.
+                pending.append(contentsOf: chunk[...newline])
+                guard try consume(pending, through: end, cursor: &cursor, decoder: decoder) else { return }
+                pending = Data(chunk.suffix(from: newline + 1))
             }
+        }
+
+        private mutating func consume(_ data: Data, through end: Date, cursor: inout Cursor, decoder: JSONDecoder) throws -> Bool {
+            for line in data.split(separator: 0x0a, omittingEmptySubsequences: false).dropLast() {
+                if line.range(of: Self.tokenMarker) != nil,
+                   let reading = Reading.decode(line, with: decoder) {
+                    guard reading.timestamp <= end else { return false }
+                    if reading.timestamp >= start {
+                        try count(reading, previous: cursor.previousTotal)
+                    }
+                    cursor.previousTotal = reading.total
+                }
+                cursor.offset += UInt64(line.count) + 1
+            }
+            return true
         }
 
         private mutating func count(_ reading: Reading, previous: UInt64?) throws {

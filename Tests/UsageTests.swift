@@ -46,6 +46,7 @@ enum UsageTests {
         try expectFailure("timeout", executable: executable, .timeout)
         try await checkIndependentRefresh(account: usage)
         try await checkRateLimitsRefresh(account: usage)
+        try await checkRateLimitsPublishFailure(account: usage)
         print("用量、热力图、额度切换、独立刷新和 App Server RPC 测试通过")
     }
 
@@ -135,13 +136,13 @@ enum UsageTests {
         try check(local == .init(startDate: "2026-11-04", tokens: 220), "本机统计跨午夜增量，排除重复、分叉历史和未来事件")
         let resumed = try LocalUsage.readToday(codexHome: root, indexFile: index, date: date, calendar: calendar)
         try check(resumed == local, "重启后读取持久进度不重复计数")
-        let event = tokenEvent("2026-11-04T05:30:00Z", total: 560, last: 60)
+        let event = tokenEvent("2026-11-04T05:30:00Z", total: 560, last: 60) + String(repeating: " ", count: 140_000)
         try append(event, to: liveFile, modifiedAt: tomorrow)
         let partial = try LocalUsage.readToday(codexHome: root, indexFile: index, date: nextTime, calendar: calendar)
         try check(partial?.tokens == 620, "续读已到时的事件，保留尚未换行的尾部")
         try append("\n", to: liveFile, modifiedAt: tomorrow)
         let completed = try LocalUsage.readToday(codexHome: root, indexFile: index, date: nextTime, calendar: calendar)
-        try check(completed?.tokens == 680, "下一次读取补齐的行")
+        try check(completed?.tokens == 680, "下一次读取补齐的长行")
         let archived = archive.appending(path: liveFile.lastPathComponent)
         try FileManager.default.moveItem(at: liveFile, to: archived)
         let afterMove = try LocalUsage.readToday(codexHome: root, indexFile: index, date: nextTime, calendar: calendar)
@@ -224,6 +225,30 @@ enum UsageTests {
         )
         await recovered.refreshRateLimits()
         try check(saved?.rateLimitsUnavailable == false && recovered.errorMessage == nil, "额度查询恢复后解除不可用状态")
+    }
+
+    @MainActor
+    private static func checkRateLimitsPublishFailure(account: AccountUsage) async throws {
+        var cached = try JSONDecoder().decode(AccountRateLimits.self, from: Data(rateLimitsPayload.utf8))
+        let current = cached
+        cached.rateLimits.secondary?.usedPercent = 25
+        var publishAttempts = 0
+        let controller = UsageController(
+            snapshot: UsageSnapshot(usage: account, rateLimits: cached, rateLimitsUnavailable: false),
+            readAccount: { account }, readLocal: { nil }, readRateLimits: { current },
+            publish: { _ in
+                publishAttempts += 1
+                if publishAttempts == 1 { throw CocoaError(.fileWriteOutOfSpace) }
+            }
+        )
+
+        await controller.refreshRateLimits()
+        try check(publishAttempts == 1, "保存失败时不额外写入额度不可用状态")
+        try check(controller.snapshot?.rateLimits == cached && controller.snapshot?.rateLimitsUnavailable == false,
+                  "保存失败时保留原快照和额度可用状态")
+        try check(controller.errorMessage?.contains("额度保存失败") == true, "区分保存失败和查询失败")
+        await controller.refreshRateLimits()
+        try check(controller.snapshot?.rateLimits == current && controller.errorMessage == nil, "保存恢复后更新额度并清除错误")
     }
 
     private actor AccountGate {
