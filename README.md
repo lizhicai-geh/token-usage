@@ -33,13 +33,14 @@
 
 - **账户数据**：App 通过标准输入输出与 `codex app-server` 通信，分别调用 `account/usage/read` 读取用量及统计，调用 `account/rateLimits/read` 读取额度。套餐与积分的切换优先依据服务端的 `ordinaryUsageAllowed`，旧版 CLI 则根据额度窗口和限额状态推断。额度查询失败时显示空环，用量仍单独刷新。超过 45 分钟的额度缓存会在悬停提示中标记。
 - **本机数据**：App 增量读取 Codex 数据目录中 `sessions` 和 `archived_sessions` 下的用量事件。账户查询失败或缺少当天记录时，如有本机统计，今日数字会切换到本机用量。账户恢复并返回当天记录后，今日数字会切回账户用量。热力图的历史数据和账户统计使用最近一次成功查询的账户数据。
-- **刷新与存储**：App 运行期间，即使关闭窗口，也会分别每分钟刷新本机统计、账户用量和额度。退出 App 后，小组件继续使用最近保存的快照，桌面显示的刷新时机由 WidgetKit 决定。快照与本机日志读取进度保存在 `~/Library/Application Support/CodexTokenWidget/`。
+- **刷新与存储**：App 运行期间，即使关闭窗口，也会分别每分钟刷新本机统计、账户用量和额度。数据有变化时，App 会合并刷新请求；点击「立即刷新」也会在读完数据后请求小组件更新。桌面显示的刷新时机由 WidgetKit 决定。退出 App 后，小组件继续使用最近保存的快照。快照与本机日志读取进度保存在 `~/Library/Application Support/CodexTokenWidget/`。
 
 ## 常见问题
 
 - **找不到 Codex CLI**：App 按顺序查找 `CODEX_TOKEN_WIDGET_CLI`、`PATH`、常见安装位置和 ChatGPT 桌面版随附的 CLI。自定义安装时，可以在启动 App 的进程环境中将 `CODEX_TOKEN_WIDGET_CLI` 设为可执行文件的绝对路径。
 - **本机统计未读取预期目录**：App 默认读取 `~/.codex`。如果 Codex 使用自定义目录，请在启动 App 的进程环境中将 `CODEX_HOME` 设为相同的绝对路径。
 - **小组件图库仍显示旧样式**：关闭图库，在终端执行 `killall NotificationCenter`，再打开图库。如果通过 Xcode 运行过其他构建副本，可用 `pluginkit -m -A -D -v -i dev.codextoken.app.widget` 检查注册路径。图库使用内置示例数据，桌面小组件使用 App 保存的快照。
+- **App 有新数据，桌面小组件没有更新**：如果移动过仓库，或通过 Xcode 运行过 App，退出旧副本，重新执行 `./Scripts/build-app` 并打开 `dist/Token Usage.app`。如果桌面仍保留旧的小组件实例，移除后再从图库添加。
 - **指标显示「—」**：该指标暂时缺少数据。可以在 App 中点击「立即刷新」，并查看窗口中的错误提示。
 
 ## 开发与测试

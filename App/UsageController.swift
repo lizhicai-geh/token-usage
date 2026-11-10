@@ -17,7 +17,11 @@ final class UsageController: NSObject, NSApplicationDelegate, ObservableObject {
     private let readRateLimits: @Sendable () async throws -> AccountRateLimits
     private let readLocal: @Sendable () async throws -> AccountUsage.DailyBucket?
     private let publish: (UsageSnapshot) throws -> Void
+    private let reloadWidget: () -> Void
     private var refreshLoops: [Task<Void, Never>] = []
+    private var widgetReloadTask: Task<Void, Never>?
+    private var lastWidgetReload: ContinuousClock.Instant?
+    private var isManuallyRefreshing = false
 
     var isRefreshing: Bool { isRefreshingLocal || isRefreshingAccount || isRefreshingRateLimits }
     var errorMessage: String? { localError ?? accountError ?? rateLimitsError }
@@ -40,8 +44,8 @@ final class UsageController: NSObject, NSApplicationDelegate, ObservableObject {
                     try AppServerClient.installed().readRateLimits()
                 }.value
             },
-            publish: { snapshot in
-                try snapshot.save()
+            publish: { try $0.save() },
+            reloadWidget: {
                 WidgetCenter.shared.reloadTimelines(ofKind: UsageSnapshot.widgetKind)
             }
         )
@@ -50,12 +54,14 @@ final class UsageController: NSObject, NSApplicationDelegate, ObservableObject {
     init(snapshot: UsageSnapshot?, readAccount: @escaping @Sendable () async throws -> AccountUsage,
          readLocal: @escaping @Sendable () async throws -> AccountUsage.DailyBucket?,
          readRateLimits: @escaping @Sendable () async throws -> AccountRateLimits,
-         publish: @escaping (UsageSnapshot) throws -> Void) {
+         publish: @escaping (UsageSnapshot) throws -> Void,
+         reloadWidget: @escaping () -> Void = {}) {
         self.snapshot = snapshot
         self.readAccount = readAccount
         self.readLocal = readLocal
         self.readRateLimits = readRateLimits
         self.publish = publish
+        self.reloadWidget = reloadWidget
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -64,13 +70,21 @@ final class UsageController: NSObject, NSApplicationDelegate, ObservableObject {
 
     func applicationWillTerminate(_ notification: Notification) {
         for loop in refreshLoops { loop.cancel() }
+        widgetReloadTask?.cancel()
     }
 
     func refresh() async {
+        guard !isManuallyRefreshing else { return }
+        isManuallyRefreshing = true
+        widgetReloadTask?.cancel()
+        widgetReloadTask = nil
+        defer { isManuallyRefreshing = false }
+
         async let local: Void = refreshLocal()
         async let account: Void = refreshAccount()
         async let rateLimits: Void = refreshRateLimits()
         _ = await (local, account, rateLimits)
+        if snapshot != nil { requestWidgetReload() }
     }
 
     func refreshLocal() async {
@@ -150,7 +164,27 @@ final class UsageController: NSObject, NSApplicationDelegate, ObservableObject {
         var updated = snapshot ?? UsageSnapshot()
         update(&updated)
         try publish(updated)
+        let widgetDataChanged = snapshot.map { !updated.hasSameWidgetData(as: $0) } ?? true
         snapshot = updated
+        if widgetDataChanged { scheduleWidgetReload() }
+    }
+
+    private func scheduleWidgetReload() {
+        guard !isManuallyRefreshing, widgetReloadTask == nil else { return }
+        let clock = ContinuousClock()
+        // Combine nearby writes and give WidgetKit time between automatic requests.
+        let deadline = max(clock.now + .seconds(2), lastWidgetReload.map { $0 + .seconds(300) } ?? clock.now)
+        widgetReloadTask = Task { [weak self] in
+            do { try await clock.sleep(until: deadline) } catch { return }
+            guard !Task.isCancelled, let self else { return }
+            widgetReloadTask = nil
+            requestWidgetReload()
+        }
+    }
+
+    private func requestWidgetReload() {
+        lastWidgetReload = ContinuousClock().now
+        reloadWidget()
     }
 
     private func poll(_ refresh: @escaping @MainActor () async -> Void) -> Task<Void, Never> {

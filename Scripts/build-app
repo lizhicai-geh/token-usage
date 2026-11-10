@@ -13,11 +13,16 @@ mkdir -p dist
 /usr/bin/ditto "$product" 'dist/Token Usage.app'
 /usr/bin/touch 'dist/Token Usage.app'
 
-# Xcode registers the build product automatically. Keep only the dist copy registered.
+# Xcode registers the build product automatically. Register the dist copy as an
+# app so PlugInKit discovers the extension with its containing bundle.
 lsregister='/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister'
-extension='Contents/PlugIns/CodexTokenWidget.appex'
-/usr/bin/pluginkit -r "$PWD/$product/$extension"
+app="$PWD/dist/Token Usage.app"
+extension="$app/Contents/PlugIns/CodexTokenWidget.appex"
 "$lsregister" -u "$PWD/$product"
-"$lsregister" -f "$PWD/dist/Token Usage.app"
-/usr/bin/pluginkit -a "$PWD/dist/Token Usage.app/$extension"
-printf '已更新：%s/dist/Token Usage.app\n' "$PWD"
+"$lsregister" -f "$app"
+registered=$(/usr/bin/pluginkit -m -v -i dev.codextoken.app.widget)
+if [[ "$registered" != *$'\t'"$extension"$'\n'* ]]; then
+  printf '小组件未注册到 %s。当前注册状态：\n%s\n' "$extension" "$registered" >&2
+  exit 1
+fi
+printf '已更新：%s\n' "$app"

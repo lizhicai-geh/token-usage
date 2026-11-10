@@ -14,6 +14,13 @@ struct UsageSnapshot: Codable, Sendable {
     static let widgetKind = "dev.codextoken.usage"
     static let refreshInterval: TimeInterval = 15 * 60
 
+    func hasSameWidgetData(as other: Self) -> Bool {
+        usage == other.usage && localToday == other.localToday &&
+            (accountUnavailable == true) == (other.accountUnavailable == true) &&
+            rateLimits == other.rateLimits &&
+            (rateLimitsUnavailable == true) == (other.rateLimitsUnavailable == true)
+    }
+
     static var directory: URL? {
         // Foundation returns the extension's sandbox home. Resolve the login
         // home so both processes address the same file.

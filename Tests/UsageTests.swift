@@ -47,6 +47,7 @@ enum UsageTests {
         try await checkIndependentRefresh(account: usage)
         try await checkRateLimitsRefresh(account: usage)
         try await checkRateLimitsPublishFailure(account: usage)
+        try await checkManualWidgetReload(account: usage)
         print("用量、热力图、额度切换、独立刷新和 App Server RPC 测试通过")
     }
 
@@ -249,6 +250,30 @@ enum UsageTests {
         try check(controller.errorMessage?.contains("额度保存失败") == true, "区分保存失败和查询失败")
         await controller.refreshRateLimits()
         try check(controller.snapshot?.rateLimits == current && controller.errorMessage == nil, "保存恢复后更新额度并清除错误")
+    }
+
+    @MainActor
+    private static func checkManualWidgetReload(account: AccountUsage) async throws {
+        let limits = try JSONDecoder().decode(AccountRateLimits.self, from: Data(rateLimitsPayload.utf8))
+        let gate = AccountGate()
+        var saved: UsageSnapshot?
+        var reloads: [UsageSnapshot] = []
+        let controller = UsageController(
+            snapshot: nil,
+            readAccount: { try await gate.read() },
+            readLocal: { .init(startDate: "2026-11-04", tokens: 321) },
+            readRateLimits: { limits },
+            publish: { saved = $0 },
+            reloadWidget: { if let saved { reloads.append(saved) } }
+        )
+        let pending = Task { await controller.refresh() }
+        await gate.waitForRequest()
+        try check(reloads.isEmpty, "手动刷新等待读取完成后再通知小组件")
+        await gate.finish(.success(account))
+        await pending.value
+        try check(reloads.count == 1, "手动刷新只通知小组件一次")
+        try check(reloads.first?.usage == account && reloads.first?.localToday?.tokens == 321 &&
+                  reloads.first?.rateLimits == limits, "通知小组件时三类数据均已保存")
     }
 
     private actor AccountGate {
