@@ -66,6 +66,10 @@ enum UsageTests {
         try check(history.peak == 5_000_000, "历史颜色范围包含旧记录，排除未来和无效日期")
         try check(history.todayTokens == 128_600 && history.weeks.last?.days.map(\.tokens) == ActivityCalendar(usage: usage, date: date, calendar: calendar).weeks.last?.days.map(\.tokens), "扩展历史不影响今日数据和最新一周")
         try check(ActivityCalendar(usage: historical, date: date, calendar: calendar).weeks.count == 27, "桌面小组件仍只展示最近 27 周")
+        let medium = ActivityCalendar(usage: historical, date: date, calendar: calendar, weekCount: 17)
+        try check(medium.weeks.count == 17 &&
+                  medium.weeks.first?.days.first.map { calendar.usageDateKey(for: $0.date) } == "2026-07-13" &&
+                  medium.todayTokens == 128_600, "中号显示截至本周的 17 周，保留今日用量")
         try check(ActivityCalendar(usage: empty, date: date, calendar: calendar, includeHistory: true).weeks.count == 27, "缺失历史时保留最近 27 周")
         try check(calendar.usageDate(from: "2026-02-30") == nil && calendar.usageDate(from: "2026-2-03") == nil, "无效及非规范日期不能扩展历史范围")
         try check(calendar.usageDate(from: "2024-02-29").map { calendar.usageDateKey(for: $0) } == "2024-02-29", "闰日可以用于历史定位")

@@ -5,17 +5,34 @@ import WidgetKit
 struct CodexTokenWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: UsageSnapshot.widgetKind, provider: UsageProvider()) { entry in
-            LCDPanel(
-                snapshot: entry.snapshot, date: entry.date, isPreview: entry.isPreview, compactBezel: true,
-                activityInteraction: entry.isPreview ? .none : .widgetLinks
-            )
+            UsageWidgetView(entry: entry)
                 .containerBackground(for: .widget) { Color(white: 0.96) }
         }
         .configurationDisplayName("Token Usage")
         .description("以液晶仪表查看今日 Token、每日活动和账户统计。")
-        .supportedFamilies([.systemLarge])
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
         .contentMarginsDisabled()
         .containerBackgroundRemovable(false)
+    }
+}
+
+private struct UsageWidgetView: View {
+    @Environment(\.widgetFamily) private var family
+    let entry: UsageEntry
+
+    var body: some View {
+        LCDPanel(
+            snapshot: entry.snapshot, date: entry.date, layout: layout,
+            activityInteraction: entry.isPreview ? .none : .widgetLinks
+        )
+    }
+
+    private var layout: LCDPanel.Layout {
+        switch family {
+        case .systemSmall: .small
+        case .systemMedium: .medium
+        default: .large
+        }
     }
 }
 

@@ -95,6 +95,7 @@ struct ActivityGrid: View {
             Canvas { context, _ in
                 for (column, week) in activity.weeks.enumerated() {
                     guard let month = week.month else { continue }
+                    if column == 0 && activity.weeks.dropFirst().first?.month != nil { continue }
                     let label = Text("\(month)月").font(.system(size: 7, weight: .medium)).foregroundStyle(ink)
                     let x = CGFloat(column) * Self.columnStep + 2
                     context.draw(label, at: CGPoint(x: x, y: 7), anchor: .leading)

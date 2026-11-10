@@ -42,7 +42,7 @@ private struct CodexTokenWindow: View {
                 }
             }
 
-            Text("在桌面编辑小组件，选择 Token Usage 的大尺寸。")
+            Text("在桌面编辑小组件，选择 Token Usage 的小、中或大尺寸。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

@@ -1,10 +1,13 @@
 import SwiftUI
 
 struct LCDPanel: View {
+    enum Layout {
+        case app, small, medium, large
+    }
+
     let snapshot: UsageSnapshot?
     let date: Date
-    var isPreview = false
-    var compactBezel = false
+    var layout: Layout = .app
     var activityInteraction: ActivityGrid.Interaction = .none
     @State private var isHoveringAllowance = false
 
@@ -14,6 +17,16 @@ struct LCDPanel: View {
     private static let screenSize = CGSize(width: 290, height: 290)
     private static let contentFrame = CGRect(x: 28, y: 28, width: screenSize.width, height: screenSize.height)
         .insetBy(dx: 12, dy: 12)
+    private static let mediumWeekCount = 17
+
+    private var compactBezel: Bool { layout == .large }
+    private var panelSize: CGSize {
+        switch layout {
+        case .small: CGSize(width: 158, height: 158)
+        case .medium: CGSize(width: 344, height: 158)
+        case .app, .large: CGSize(width: Self.side, height: Self.side)
+        }
+    }
 
     private var includesActivityHistory: Bool {
         if case .hover = activityInteraction { return true }
@@ -22,9 +35,10 @@ struct LCDPanel: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let scale = min(geometry.size.width, geometry.size.height) / Self.side
+            let size = panelSize
+            let scale = min(geometry.size.width / size.width, geometry.size.height / size.height)
             face
-                .frame(width: Self.side, height: Self.side)
+                .frame(width: size.width, height: size.height)
                 .scaleEffect(scale)
                 .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
         }
@@ -35,19 +49,87 @@ struct LCDPanel: View {
         let calendar = Calendar.localGregorian
         let activity = ActivityCalendar(
             usage: snapshot?.usage, localToday: snapshot?.localToday, preferLocalToday: snapshot?.accountUnavailable == true,
-            date: date, calendar: calendar, includeHistory: includesActivityHistory
+            date: date, calendar: calendar, includeHistory: includesActivityHistory,
+            weekCount: layout == .medium ? Self.mediumWeekCount : ActivityCalendar.weekCount
         )
         let day = calendar.usageDateKey(for: date).suffix(5).replacingOccurrences(of: "-", with: "/")
         let readout = TokenFormat.lcd(activity.todayTokens)
 
-        return ZStack(alignment: .topLeading) {
-            bezel
-            screenContent(activity: activity, day: day, readout: readout)
-                .frame(width: Self.side, height: Self.side)
-                // Leave a 12-point bezel in widgets; retain the app's 28-point bezel.
-                .scaleEffect(compactBezel ? (Self.side - 24) / Self.screenSize.width : 1)
+        return Group {
+            if layout == .small || layout == .medium {
+                compactFace(activity: activity, calendar: calendar, day: day, readout: readout)
+            } else {
+                ZStack(alignment: .topLeading) {
+                    bezel
+                    screenContent(activity: activity, day: day, readout: readout)
+                        .frame(width: Self.side, height: Self.side)
+                        // Leave a 12-point bezel in widgets; retain the app's 28-point bezel.
+                        .scaleEffect(compactBezel ? (Self.side - 24) / Self.screenSize.width : 1)
+                }
+            }
         }
         .foregroundStyle(Self.ink)
+    }
+
+    private func compactFace(activity: ActivityCalendar, calendar: Calendar, day: String,
+                             readout: TokenFormat.Readout) -> some View {
+        ZStack {
+            outerBezel(cornerRadius: 24).padding(3)
+            innerBezel(cornerRadius: 15).padding(6)
+            screenSurface.padding(9)
+
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 5) {
+                        Text(day).monospacedDigit()
+                        Text(date.formatted(.dateTime.weekday(.wide).locale(Locale(identifier: "zh_CN"))))
+                    }
+                    .font(.system(size: 10, weight: .semibold))
+                    .lineLimit(1)
+
+                    tokenReadout(readout, activity: activity).frame(height: 40)
+                    Text(todayLabel(activity))
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .lineLimit(1)
+                        .accessibilityHidden(true)
+
+                    Rectangle().fill(Self.divider).frame(height: 0.65)
+                        .accessibilityHidden(true)
+                    compactAllowance
+                }
+                .frame(width: 122)
+
+                if layout == .medium {
+                    Rectangle().fill(Self.divider).frame(width: 0.65, height: 104)
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("最近 \(Self.mediumWeekCount) 周活动")
+                            .font(.system(size: 11, weight: .semibold))
+                        ActivityGrid(activity: activity, calendar: calendar, ink: Self.ink, interaction: activityInteraction)
+                    }
+                }
+            }
+        }
+    }
+
+    private var compactAllowance: some View {
+        let limits = snapshot?.rateLimits
+        let unavailable = snapshot?.rateLimitsUnavailable == true
+        return HStack(spacing: 2) {
+            allowanceRing.accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(limits?.label ?? "额度")
+                    .font(.system(size: 9, weight: .medium))
+                Text(unavailable ? "暂不可用" : (limits?.value ?? "—"))
+                    .font(.system(size: 12, weight: .semibold))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.65)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("当前额度")
+        .accessibilityValue(allowanceDescription)
     }
 
     private func screenContent(activity: ActivityCalendar, day: String, readout: TokenFormat.Readout) -> some View {
@@ -67,11 +149,9 @@ struct LCDPanel: View {
                 .position(x: Self.contentFrame.maxX - 11.5, y: Self.contentFrame.minY + 11.5)
                 .zIndex(1)
 
-            SegmentReadout(readout: readout)
+            tokenReadout(readout, activity: activity)
                 .frame(width: 246, height: 60)
                 .position(x: 170, y: 113)
-                .accessibilityLabel(todayLabel(activity))
-                .accessibilityValue(activity.todayTokens.map(String.init) ?? "暂无数据")
 
             Text(todayLabel(activity))
                 .font(.system(size: 10, weight: .medium, design: .monospaced))
@@ -207,24 +287,39 @@ struct LCDPanel: View {
 
     private var bezel: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 35)
-                .fill(.linearGradient(colors: [Color(white: 0.93), Color(white: 0.982), Color(white: 0.91)], startPoint: .top, endPoint: .bottom))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 35)
-                        .strokeBorder(.white.opacity(0.75), lineWidth: 1)
-                }
+            outerBezel(cornerRadius: 35)
                 .frame(width: compactBezel ? 338 : 328, height: compactBezel ? 338 : 328)
                 .position(x: 173, y: 173)
 
-            RoundedRectangle(cornerRadius: 18)
-                .fill(.linearGradient(colors: [Color(white: 0.76), .white], startPoint: .top, endPoint: .bottom))
+            innerBezel(cornerRadius: 18)
                 .frame(width: compactBezel ? 330 : 303, height: compactBezel ? 330 : 303)
                 .position(x: 173, y: 173)
         }
         .accessibilityHidden(true)
     }
 
+    private func outerBezel(cornerRadius: CGFloat) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius)
+        return shape
+            .fill(.linearGradient(colors: [Color(white: 0.93), Color(white: 0.982), Color(white: 0.91)],
+                                  startPoint: .top, endPoint: .bottom))
+            .overlay { shape.strokeBorder(.white.opacity(0.75), lineWidth: 1) }
+            .accessibilityHidden(true)
+    }
+
+    private func innerBezel(cornerRadius: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: cornerRadius)
+            .fill(.linearGradient(colors: [Color(white: 0.76), .white], startPoint: .top, endPoint: .bottom))
+            .accessibilityHidden(true)
+    }
+
     private var screen: some View {
+        screenSurface
+            .frame(width: Self.screenSize.width, height: Self.screenSize.height)
+            .position(x: 173, y: 173)
+    }
+
+    private var screenSurface: some View {
         RoundedRectangle(cornerRadius: 12)
             .fill(
                 .linearGradient(
@@ -250,8 +345,6 @@ struct LCDPanel: View {
                         lineWidth: 1.3
                     )
             }
-            .frame(width: Self.screenSize.width, height: Self.screenSize.height)
-            .position(x: 173, y: 173)
             .accessibilityHidden(true)
     }
 
@@ -301,6 +394,12 @@ struct LCDPanel: View {
         return activity.todayIsLocal ? "今日 TOKENS · 本机" : "今日 TOKENS · 账户"
     }
 
+    private func tokenReadout(_ readout: TokenFormat.Readout, activity: ActivityCalendar) -> some View {
+        SegmentReadout(readout: readout)
+            .accessibilityLabel(todayLabel(activity))
+            .accessibilityValue(activity.todayTokens.map(String.init) ?? "暂无数据")
+    }
+
     private struct SegmentReadout: View {
         let readout: TokenFormat.Readout
 
@@ -326,7 +425,12 @@ struct LCDPanel: View {
                 let pointWidth: CGFloat = 11
                 let unitWidth: CGFloat = readout.unit.isEmpty ? 0 : 21
                 let numberWidth = readout.digits.reduce(CGFloat(0)) { $0 + ($1 == "." ? pointWidth : digitWidth) } - 6
-                var x = (size.width - numberWidth - unitWidth) / 2
+                let scale = min(size.width / (numberWidth + unitWidth), size.height / 60)
+                guard scale > 0 else { return }
+                var context = context
+                context.translateBy(x: 0, y: (size.height - 60 * scale) / 2)
+                context.scaleBy(x: scale, y: scale)
+                var x = (size.width / scale - numberWidth - unitWidth) / 2
 
                 for digit in readout.digits {
                     if digit == "." {
