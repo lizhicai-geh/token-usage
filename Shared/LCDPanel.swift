@@ -403,61 +403,24 @@ struct LCDPanel: View {
     private struct SegmentReadout: View {
         let readout: TokenFormat.Readout
 
-        // Top, upper right, lower right, bottom, lower left, upper left, middle.
-        private static let masks: [Character: UInt8] = [
-            "0": 0x3f, "1": 0x06, "2": 0x5b, "3": 0x4f, "4": 0x66, "5": 0x6d,
-            "6": 0x7d, "7": 0x07, "8": 0x7f, "9": 0x6f, "—": 0x40
-        ]
-
-        private static let segments: [[CGPoint]] = [
-            [(5, 0), (27, 0), (31, 4), (27, 6), (5, 6), (1, 4)],
-            [(29, 8), (33, 3), (33, 26), (29, 29), (27, 26), (27, 10)],
-            [(29, 30), (33, 33), (33, 55), (29, 52), (27, 49), (27, 33)],
-            [(5, 53), (27, 53), (31, 56), (27, 59), (5, 59), (1, 56)],
-            [(3, 30), (6, 33), (6, 49), (4, 53), (0, 55), (0, 33)],
-            [(0, 4), (4, 7), (6, 10), (6, 26), (3, 29), (0, 26)],
-            [(5, 27), (27, 27), (30, 30), (27, 33), (5, 33), (2, 30)]
-        ].map { $0.map { CGPoint(x: $0.0, y: $0.1) } }
-
         var body: some View {
-            Canvas { context, size in
-                let digitWidth: CGFloat = 39
-                let pointWidth: CGFloat = 11
-                let unitWidth: CGFloat = readout.unit.isEmpty ? 0 : 21
-                let numberWidth = readout.digits.reduce(CGFloat(0)) { $0 + ($1 == "." ? pointWidth : digitWidth) } - 6
-                let scale = min(size.width / (numberWidth + unitWidth), size.height / 60)
+            let glyphs = (readout.digits + readout.unit).compactMap { LCDGlyphs.glyphs[$0] }
+            let spacing = LCDGlyphs.spacing
+            let height = LCDGlyphs.height
+
+            return Canvas { context, size in
+                guard !glyphs.isEmpty else { return }
+                let width = glyphs.reduce(CGFloat(0)) { $0 + $1.width } + CGFloat(glyphs.count - 1) * spacing
+                let scale = min(size.width / width, size.height / height)
                 guard scale > 0 else { return }
                 var context = context
-                context.translateBy(x: 0, y: (size.height - 60 * scale) / 2)
+                context.translateBy(x: (size.width - width * scale) / 2, y: (size.height - height * scale) / 2)
                 context.scaleBy(x: scale, y: scale)
-                var x = (size.width / scale - numberWidth - unitWidth) / 2
-
-                for digit in readout.digits {
-                    if digit == "." {
-                        context.fill(Path(roundedRect: CGRect(x: x, y: 52, width: 6, height: 6), cornerRadius: 0.9), with: .color(ink))
-                        x += pointWidth
-                    } else {
-                        draw(digit, at: x, in: context)
-                        x += digitWidth
-                    }
+                for glyph in glyphs {
+                    context.fill(glyph.unlit, with: .color(ink.opacity(0.115)))
+                    context.fill(glyph.lit, with: .color(ink))
+                    context.translateBy(x: glyph.width + spacing, y: 0)
                 }
-
-                if !readout.unit.isEmpty {
-                    let unit = Text(readout.unit).font(.system(size: 17, weight: .semibold, design: .monospaced)).foregroundStyle(ink)
-                    context.draw(unit, at: CGPoint(x: x, y: 54), anchor: .leading)
-                }
-            }
-        }
-
-        private func draw(_ digit: Character, at x: CGFloat, in context: GraphicsContext) {
-            let mask = Self.masks[digit] ?? 0
-            for (index, points) in Self.segments.enumerated() {
-                let polygon = Path { path in
-                    path.addLines(points.map { CGPoint(x: $0.x + x, y: $0.y) })
-                    path.closeSubpath()
-                }
-                let isOn = mask & (1 << index) != 0
-                context.fill(polygon, with: .color(ink.opacity(isOn ? 1 : 0.115)))
             }
         }
     }
