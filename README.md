@@ -2,9 +2,15 @@
 
 原生 macOS 应用和桌面小组件。通过复古液晶面板查看 Codex 今日 Token 用量、近期活动和账户额度。
 
-![Token Usage 大尺寸小组件，显示今日 Token、周额度圆环、27 周活动热力图和五项账户统计](docs/widget-preview.png)
+<p align="center">
+  <img src="docs/widget-preview-small.png" width="158" alt="小号小组件，显示今日 Token 和周额度">
+  <img src="docs/widget-preview-medium.png" width="344" alt="中号小组件，显示今日 Token、周额度和 17 周活动热力图">
+</p>
+<p align="center">
+  <img src="docs/widget-preview.png" width="346" alt="大号小组件，显示今日 Token、周额度、27 周活动热力图和五项账户统计">
+</p>
 
-*效果图由项目的 SwiftUI 面板和内置预览数据渲染。*
+*三张效果图均由项目的 SwiftUI 面板使用同一份内置预览数据渲染。*
 
 ## 面板内容
 
