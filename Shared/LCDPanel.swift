@@ -115,16 +115,22 @@ struct LCDPanel: View {
         }
     }
 
+    private var allowanceUnavailable: Bool { snapshot?.rateLimitsUnavailable == true }
+
+    private var allowanceIsStale: Bool {
+        guard let fetchedAt = snapshot?.rateLimitsFetchedAt else { return false }
+        return date.timeIntervalSince(fetchedAt) > 3 * UsageSnapshot.refreshInterval
+    }
+
     private var compactAllowance: some View {
         let limits = snapshot?.rateLimits
-        let unavailable = snapshot?.rateLimitsUnavailable == true
         return HStack(spacing: 2) {
             allowanceRing.accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(limits?.label ?? String(localized: "额度"))
                     .font(.system(size: 9, weight: .medium))
                     .lineLimit(1)
-                Text(unavailable ? String(localized: "暂不可用") : (limits?.value ?? "—"))
+                Text(allowanceUnavailable ? String(localized: "暂不可用") : (limits?.value ?? "—"))
                     .font(.system(size: 12, weight: .semibold))
                     .monospacedDigit()
                     .lineLimit(1)
@@ -203,11 +209,11 @@ struct LCDPanel: View {
 
     private var allowanceRing: some View {
         let limits = snapshot?.rateLimits
-        let available = snapshot?.rateLimitsUnavailable != true
+        let available = !allowanceUnavailable
         let progress: Double = {
             guard available, let limits else { return 0 }
             switch limits.source {
-            case .weekly: return Double(max(0, min(100, 100 - (limits.codex.weekly?.usedPercent ?? 100)))) / 100
+            case .weekly: return Double(limits.codex.weekly?.remainingPercent ?? 0) / 100
             case .credits: return limits.codex.credits?.hasCredits == true || limits.codex.credits?.unlimited == true ? 1 : 0
             case .unknown: return 0
             }
@@ -259,22 +265,18 @@ struct LCDPanel: View {
 
     private var allowanceDescription: String {
         let limits = snapshot?.rateLimits
-        let unavailable = snapshot?.rateLimitsUnavailable == true
-        let stale = snapshot?.rateLimitsFetchedAt.map { date.timeIntervalSince($0) > 3 * UsageSnapshot.refreshInterval } ?? false
-        if unavailable { return String(localized: "额度暂时无法读取") }
+        if allowanceUnavailable { return String(localized: "额度暂时无法读取") }
         guard let limits else { return String(localized: "额度暂无数据") }
         let value = limits.value
         let title = limits.label
-        return stale ? String(localized: "\(title) · \(value) · 缓存数据") : "\(title) · \(value)"
+        return allowanceIsStale ? String(localized: "\(title) · \(value) · 缓存数据") : "\(title) · \(value)"
     }
 
     private var allowanceTooltip: some View {
         let limits = snapshot?.rateLimits
         let title = limits?.label ?? String(localized: "额度")
-        let unavailable = snapshot?.rateLimitsUnavailable == true
-        let stale = snapshot?.rateLimitsFetchedAt.map { date.timeIntervalSince($0) > 3 * UsageSnapshot.refreshInterval } ?? false
-        let value = unavailable ? String(localized: "暂不可用") : (limits?.value ?? String(localized: "暂无数据"))
-        let detail = stale && !unavailable ? String(localized: "\(value)（缓存）") : value
+        let value = allowanceUnavailable ? String(localized: "暂不可用") : (limits?.value ?? String(localized: "暂无数据"))
+        let detail = allowanceIsStale && !allowanceUnavailable ? String(localized: "\(value)（缓存）") : value
         let bubble = RoundedRectangle(cornerRadius: 12)
 
         return HStack(spacing: 0) {

@@ -121,6 +121,11 @@ enum UsageTests {
         limits.rateLimits.secondary?.usedPercent = 100
         limits.ordinaryUsageAllowed = true
         try check(limits.source == .weekly && limits.value == "剩余 0%", "服务端套餐状态优先于旧窗口百分比")
+        limits.rateLimits.secondary?.usedPercent = .min
+        try check(limits.value == "剩余 100%", "异常负用量按零处理，计算剩余额度时不溢出")
+        limits.rateLimits.secondary?.usedPercent = .max
+        try check(limits.value == "剩余 0%", "超出上限的用量按额度耗尽处理")
+        limits.rateLimits.secondary?.usedPercent = 100
         limits.ordinaryUsageAllowed = nil
         try check(limits.source == .credits, "旧版服务端在周额度耗尽时切换积分")
         limits.rateLimits.secondary?.usedPercent = 56

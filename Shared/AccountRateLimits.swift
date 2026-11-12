@@ -5,6 +5,10 @@ struct AccountRateLimits: Codable, Equatable, Sendable {
         var usedPercent: Int
         var windowDurationMins: Int?
         var resetsAt: Int64?
+
+        var remainingPercent: Int {
+            100 - min(100, max(0, usedPercent))
+        }
     }
 
     struct Credits: Codable, Equatable, Sendable {
@@ -72,8 +76,7 @@ struct AccountRateLimits: Codable, Equatable, Sendable {
         switch source {
         case .weekly:
             guard let weekly = codex.weekly else { return "—" }
-            let remaining = max(0, min(100, 100 - weekly.usedPercent))
-            let percent = remaining.formatted(.percent.scale(1).locale(UsageLocale.current))
+            let percent = weekly.remainingPercent.formatted(.percent.scale(1).locale(UsageLocale.current))
             return String(localized: "剩余 \(percent)")
         case .credits: return codex.credits?.formattedBalance ?? "—"
         case .unknown: return "—"
