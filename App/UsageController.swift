@@ -141,7 +141,7 @@ final class UsageController: NSObject, NSApplicationDelegate, ObservableObject {
         do {
             limits = try await readRateLimits()
         } catch {
-            rateLimitsError = "额度查询失败：\(error.localizedDescription)"
+            rateLimitsError = String(localized: "额度查询失败：\(error.localizedDescription)")
             if snapshot?.rateLimitsUnavailable != true {
                 try? updateSnapshot { $0.rateLimitsUnavailable = true }
             }
@@ -156,7 +156,7 @@ final class UsageController: NSObject, NSApplicationDelegate, ObservableObject {
             }
             rateLimitsError = nil
         } catch {
-            rateLimitsError = "额度保存失败：\(error.localizedDescription)"
+            rateLimitsError = String(localized: "额度保存失败：\(error.localizedDescription)")
         }
     }
 

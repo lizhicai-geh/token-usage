@@ -118,31 +118,22 @@ enum TokenFormat {
 
     static func count(_ tokens: UInt64?) -> String {
         guard let tokens else { return "—" }
-        switch tokens {
-        case 100_000_000_000_000_000...: return compact(tokens, scale: 100_000_000_000_000_000, suffix: "亿亿")
-        case 1_000_000_000_000...: return compact(tokens, scale: 1_000_000_000_000, suffix: "万亿")
-        case 100_000_000...: return compact(tokens, scale: 100_000_000, suffix: "亿")
-        case 10_000...: return compact(tokens, scale: 10_000, suffix: "万")
-        default: return String(tokens)
-        }
+        return tokens.formatted(.number.notation(.compactName).precision(.fractionLength(0...1))
+            .locale(UsageLocale.current))
     }
 
     static func duration(_ seconds: UInt64?) -> String {
         guard let seconds else { return "—" }
         let hours = seconds / 3_600
         let minutes = seconds / 60 % 60
-        if hours > 0 { return "\(hours) 小时 \(minutes) 分" }
-        if minutes > 0 { return "\(minutes) 分" }
-        return "\(seconds) 秒"
+        if hours > 0 { return String(localized: "\(hours) 小时 \(minutes) 分") }
+        if minutes > 0 { return String(localized: "\(minutes) 分") }
+        return String(localized: "\(seconds) 秒")
     }
 
     static func days(_ value: UInt64?) -> String {
-        value.map { "\($0) 天" } ?? "—"
-    }
-
-    private static func compact(_ count: UInt64, scale: Double, suffix: String) -> String {
-        let formatted = decimal(Double(count) / scale)
-        return (formatted.hasSuffix(".0") ? String(formatted.dropLast(2)) : formatted) + suffix
+        guard let value else { return "—" }
+        return String(localized: "\(value) 天")
     }
 
     private static func decimal(_ value: Double) -> String {

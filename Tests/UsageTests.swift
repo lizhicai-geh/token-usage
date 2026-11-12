@@ -8,6 +8,16 @@ enum UsageTests {
             try serve()
             return
         }
+        if CommandLine.arguments.contains("--verify-english") {
+            try checkEnglishLocalization()
+            print("英文本地化测试通过")
+            return
+        }
+        if CommandLine.arguments.contains("--verify-traditional-chinese") {
+            try checkTraditionalChineseLocalization()
+            print("繁体中文本地化测试通过")
+            return
+        }
 
         let data = Data(Self.payload.utf8)
         let usage = try JSONDecoder().decode(AccountUsage.self, from: data)
@@ -33,6 +43,7 @@ enum UsageTests {
         try check(TokenFormat.lcd(999_999) == .init(digits: "1.0", unit: "M"), "四舍五入后进位")
         try check(TokenFormat.count(36_320_000_000) == "363.2亿", "累计量使用中文单位")
         try check(TokenFormat.duration(80_640) == "22 小时 24 分", "最长任务按时分显示")
+        try check(TokenFormat.days(1) == "1 天" && TokenFormat.days(2) == "2 天", "简体中文天数单位")
         try checkRateLimits()
 
         let executable = URL(fileURLWithPath: CommandLine.arguments[0])
@@ -49,6 +60,33 @@ enum UsageTests {
         try await checkRateLimitsPublishFailure(account: usage)
         try await checkManualWidgetReload(account: usage)
         print("用量、热力图、额度切换、独立刷新和 App Server RPC 测试通过")
+    }
+
+    private static func checkEnglishLocalization() throws {
+        try check(UsageLocale.current.language.languageCode == .english, "英文资源随首选语言选中")
+        try check(TokenFormat.count(36_320_000_000) == "36.3B", "英文用量单位")
+        try check(TokenFormat.lcd(128_600) == .init(digits: "128.6", unit: "K"), "LCD 字形格式跨语言一致")
+        try check(TokenFormat.duration(80_640) == "22 hr 24 min", "英文时长")
+        try check(TokenFormat.days(1) == "1 day" && TokenFormat.days(2) == "2 days", "英文天数区分单复数")
+        let limits = try JSONDecoder().decode(AccountRateLimits.self, from: Data(rateLimitsPayload.utf8))
+        try check(limits.label == "Weekly allowance" && limits.value == "44% left", "英文额度标签和百分比")
+        let rpcError = AppServerError.rpc(code: -1, message: "Server detail")
+        try check(rpcError.localizedDescription == "Codex App Server (-1)\nServer detail", "英文错误保留服务端详情")
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try require(TimeZone(identifier: "Asia/Shanghai"))
+        let date = Date(timeIntervalSince1970: 0).addingTimeInterval(17 * 3_600)
+        let style = UsageLocale.dateStyle(calendar: calendar)
+        try check(date.formatted(style.weekday(.wide)) == "Friday", "星期本地化且使用统计时区")
+    }
+
+    private static func checkTraditionalChineseLocalization() throws {
+        try check(Bundle.main.preferredLocalizations.first == "zh-Hant", "繁体中文地区偏好匹配 zh-Hant")
+        try check(String(localized: "立即刷新") == "立即重新整理", "繁体中文界面文案")
+        try check(TokenFormat.count(36_320_000_000) == "363.2億", "繁体中文用量单位")
+        try check(TokenFormat.duration(80_640) == "22 小時 24 分", "繁体中文时长")
+        let limits = try JSONDecoder().decode(AccountRateLimits.self, from: Data(rateLimitsPayload.utf8))
+        try check(limits.label == "每週額度" && limits.value == "剩餘 44%", "繁体中文额度标签和百分比")
+        try check(AppServerError.timeout.localizedDescription == "讀取 Codex 用量逾時，請稍後再試。", "繁体中文错误提示")
     }
 
     private static func checkActivityHistory(usage: AccountUsage, empty: AccountUsage, date: Date, calendar: Calendar) throws {

@@ -52,16 +52,15 @@ struct LCDPanel: View {
             date: date, calendar: calendar, includeHistory: includesActivityHistory,
             weekCount: layout == .medium ? Self.mediumWeekCount : ActivityCalendar.weekCount
         )
-        let day = calendar.usageDateKey(for: date).suffix(5).replacingOccurrences(of: "-", with: "/")
         let readout = TokenFormat.lcd(activity.todayTokens)
 
         return Group {
             if layout == .small || layout == .medium {
-                compactFace(activity: activity, calendar: calendar, day: day, readout: readout)
+                compactFace(activity: activity, calendar: calendar, readout: readout)
             } else {
                 ZStack(alignment: .topLeading) {
                     bezel
-                    screenContent(activity: activity, day: day, readout: readout)
+                    screenContent(activity: activity, calendar: calendar, readout: readout)
                         .frame(width: Self.side, height: Self.side)
                         // Leave a 12-point bezel in widgets; retain the app's 28-point bezel.
                         .scaleEffect(compactBezel ? (Self.side - 24) / Self.screenSize.width : 1)
@@ -71,9 +70,10 @@ struct LCDPanel: View {
         .foregroundStyle(Self.ink)
     }
 
-    private func compactFace(activity: ActivityCalendar, calendar: Calendar, day: String,
+    private func compactFace(activity: ActivityCalendar, calendar: Calendar,
                              readout: TokenFormat.Readout) -> some View {
-        ZStack {
+        let dateStyle = UsageLocale.dateStyle(calendar: calendar)
+        return ZStack {
             outerBezel(cornerRadius: 24).padding(3)
             innerBezel(cornerRadius: 15).padding(6)
             screenSurface.padding(9)
@@ -81,8 +81,8 @@ struct LCDPanel: View {
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 5) {
-                        Text(day).monospacedDigit()
-                        Text(date.formatted(.dateTime.weekday(.wide).locale(Locale(identifier: "zh_CN"))))
+                        Text(date.formatted(dateStyle.month(.twoDigits).day(.twoDigits))).monospacedDigit()
+                        Text(date.formatted(dateStyle.weekday(.wide)))
                     }
                     .font(.system(size: 10, weight: .semibold))
                     .lineLimit(1)
@@ -91,6 +91,7 @@ struct LCDPanel: View {
                     Text(todayLabel(activity))
                         .font(.system(size: 10, weight: .medium, design: .monospaced))
                         .lineLimit(1)
+                        .minimumScaleFactor(0.75)
                         .accessibilityHidden(true)
 
                     Rectangle().fill(Self.divider).frame(height: 0.65)
@@ -105,6 +106,8 @@ struct LCDPanel: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("最近 \(Self.mediumWeekCount) 周活动")
                             .font(.system(size: 11, weight: .semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
                         ActivityGrid(activity: activity, calendar: calendar, ink: Self.ink, interaction: activityInteraction)
                     }
                 }
@@ -118,9 +121,10 @@ struct LCDPanel: View {
         return HStack(spacing: 2) {
             allowanceRing.accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text(limits?.label ?? "额度")
+                Text(limits?.label ?? String(localized: "额度"))
                     .font(.system(size: 9, weight: .medium))
-                Text(unavailable ? "暂不可用" : (limits?.value ?? "—"))
+                    .lineLimit(1)
+                Text(unavailable ? String(localized: "暂不可用") : (limits?.value ?? "—"))
                     .font(.system(size: 12, weight: .semibold))
                     .monospacedDigit()
                     .lineLimit(1)
@@ -132,14 +136,14 @@ struct LCDPanel: View {
         .accessibilityValue(allowanceDescription)
     }
 
-    private func screenContent(activity: ActivityCalendar, day: String, readout: TokenFormat.Readout) -> some View {
-        let calendar = Calendar.localGregorian
+    private func screenContent(activity: ActivityCalendar, calendar: Calendar, readout: TokenFormat.Readout) -> some View {
+        let dateStyle = UsageLocale.dateStyle(calendar: calendar)
         return ZStack(alignment: .topLeading) {
             screen
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(day)")
+                Text(date.formatted(dateStyle.month(.twoDigits).day(.twoDigits)))
                     .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                Text(date.formatted(.dateTime.weekday(.wide).locale(Locale(identifier: "zh_CN"))))
+                Text(date.formatted(dateStyle.weekday(.wide)))
                     .font(.system(size: 8, weight: .medium))
             }
             .offset(x: Self.contentFrame.minX, y: Self.contentFrame.minY)
@@ -193,7 +197,7 @@ struct LCDPanel: View {
                         .accessibilityHidden(true)
                 }
             }
-            .accessibilityLabel("当前使用\(snapshot?.rateLimits?.label ?? "额度")")
+            .accessibilityLabel("当前额度")
             .accessibilityValue(allowanceDescription)
     }
 
@@ -257,23 +261,25 @@ struct LCDPanel: View {
         let limits = snapshot?.rateLimits
         let unavailable = snapshot?.rateLimitsUnavailable == true
         let stale = snapshot?.rateLimitsFetchedAt.map { date.timeIntervalSince($0) > 3 * UsageSnapshot.refreshInterval } ?? false
-        if unavailable { return "额度暂时无法读取" }
-        guard let limits else { return "额度暂无数据" }
-        let title = limits.source == .weekly ? "每周" : limits.label
-        return "\(title) · \(limits.value)\(stale ? " · 缓存数据" : "")"
+        if unavailable { return String(localized: "额度暂时无法读取") }
+        guard let limits else { return String(localized: "额度暂无数据") }
+        let value = limits.value
+        let title = limits.label
+        return stale ? String(localized: "\(title) · \(value) · 缓存数据") : "\(title) · \(value)"
     }
 
     private var allowanceTooltip: some View {
         let limits = snapshot?.rateLimits
-        let title = limits?.source == .weekly ? "每周" : (limits?.label ?? "额度")
+        let title = limits?.label ?? String(localized: "额度")
         let unavailable = snapshot?.rateLimitsUnavailable == true
         let stale = snapshot?.rateLimitsFetchedAt.map { date.timeIntervalSince($0) > 3 * UsageSnapshot.refreshInterval } ?? false
-        let value = unavailable ? "暂不可用" : (limits?.value ?? "暂无数据")
+        let value = unavailable ? String(localized: "暂不可用") : (limits?.value ?? String(localized: "暂无数据"))
+        let detail = stale && !unavailable ? String(localized: "\(value)（缓存）") : value
         let bubble = RoundedRectangle(cornerRadius: 12)
 
         return HStack(spacing: 0) {
             Text(title).fontWeight(.semibold)
-            Text(" · \(value)\(stale && !unavailable ? "（缓存）" : "")").fontWeight(.regular)
+            Text(" · " + detail).fontWeight(.regular)
         }
             .font(.system(size: 12))
             .foregroundStyle(.white)
@@ -368,7 +374,7 @@ struct LCDPanel: View {
         }
     }
 
-    private func metric(_ label: String, _ value: String, width: CGFloat, divided: Bool = false) -> some View {
+    private func metric(_ label: LocalizedStringKey, _ value: String, width: CGFloat, divided: Bool = false) -> some View {
         VStack(spacing: 2) {
             Text(value)
                 .font(.system(size: 11, weight: .semibold))
@@ -390,14 +396,14 @@ struct LCDPanel: View {
     }
 
     private func todayLabel(_ activity: ActivityCalendar) -> String {
-        guard activity.todayTokens != nil else { return "今日 TOKENS" }
-        return activity.todayIsLocal ? "今日 TOKENS · 本机" : "今日 TOKENS · 账户"
+        guard activity.todayTokens != nil else { return String(localized: "今日 TOKENS") }
+        return activity.todayIsLocal ? String(localized: "今日 TOKENS · 本机") : String(localized: "今日 TOKENS · 账户")
     }
 
     private func tokenReadout(_ readout: TokenFormat.Readout, activity: ActivityCalendar) -> some View {
         SegmentReadout(readout: readout)
             .accessibilityLabel(todayLabel(activity))
-            .accessibilityValue(activity.todayTokens.map(String.init) ?? "暂无数据")
+            .accessibilityValue(activity.todayTokens?.formatted(.number.locale(UsageLocale.current)) ?? String(localized: "暂无数据"))
     }
 
     private struct SegmentReadout: View {

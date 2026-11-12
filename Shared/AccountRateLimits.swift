@@ -13,11 +13,11 @@ struct AccountRateLimits: Codable, Equatable, Sendable {
         var balance: String?
 
         var formattedBalance: String {
-            if unlimited { return "不限量" }
+            if unlimited { return String(localized: "不限量") }
             guard let balance, let amount = Decimal(string: balance, locale: Locale(identifier: "en_US_POSIX")),
                   amount >= 0 else { return hasCredits ? "—" : "0" }
             let formatter = NumberFormatter()
-            formatter.locale = Locale(identifier: "en_US")
+            formatter.locale = UsageLocale.current
             formatter.numberStyle = .decimal
             formatter.maximumFractionDigits = 2
             return formatter.string(from: amount as NSDecimalNumber) ?? "—"
@@ -62,9 +62,9 @@ struct AccountRateLimits: Codable, Equatable, Sendable {
 
     var label: String {
         switch source {
-        case .weekly: return "周额度"
-        case .credits: return "积分"
-        case .unknown: return "额度"
+        case .weekly: return String(localized: "周额度")
+        case .credits: return String(localized: "积分")
+        case .unknown: return String(localized: "额度")
         }
     }
 
@@ -72,7 +72,9 @@ struct AccountRateLimits: Codable, Equatable, Sendable {
         switch source {
         case .weekly:
             guard let weekly = codex.weekly else { return "—" }
-            return "剩余 \(max(0, min(100, 100 - weekly.usedPercent)))%"
+            let remaining = max(0, min(100, 100 - weekly.usedPercent))
+            let percent = remaining.formatted(.percent.scale(1).locale(UsageLocale.current))
+            return String(localized: "剩余 \(percent)")
         case .credits: return codex.credits?.formattedBalance ?? "—"
         case .unknown: return "—"
         }

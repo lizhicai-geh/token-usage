@@ -45,6 +45,8 @@ private struct CodexTokenWindow: View {
             Text("在桌面编辑小组件，选择 Token Usage 的小、中或大尺寸。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 346)
         }
         .padding(20)
         .frame(minWidth: 386)

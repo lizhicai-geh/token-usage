@@ -10,12 +10,12 @@ enum AppServerError: LocalizedError, Equatable {
 
     var errorDescription: String? {
         switch self {
-        case .cliNotFound: return "找不到 Codex CLI。请安装 Codex CLI 或 ChatGPT 桌面 App。"
-        case .disconnected: return "Codex App Server 已断开。请检查 Codex CLI 是否能正常启动。"
-        case .invalidResponse: return "Codex App Server 返回了无法识别的用量数据。"
-        case .timeout: return "读取 Codex 用量超时，请稍后重试。"
-        case .rpc(-32601, _): return "当前 Codex CLI 不支持账户用量接口，请更新 Codex。"
-        case .rpc(let code, let message): return "Codex App Server（\(code)）\n\(message)"
+        case .cliNotFound: return String(localized: "找不到 Codex CLI。请安装 Codex CLI 或 ChatGPT 桌面 App。")
+        case .disconnected: return String(localized: "Codex App Server 已断开。请检查 Codex CLI 是否能正常启动。")
+        case .invalidResponse: return String(localized: "Codex App Server 返回了无法识别的用量数据。")
+        case .timeout: return String(localized: "读取 Codex 用量超时，请稍后重试。")
+        case .rpc(-32601, _): return String(localized: "当前 Codex CLI 不支持账户用量接口，请更新 Codex。")
+        case .rpc(let code, let message): return String(localized: "Codex App Server（\(code)）\n\(message)")
         }
     }
 }

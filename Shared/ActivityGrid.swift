@@ -91,13 +91,19 @@ struct ActivityGrid: View {
     }
 
     private func grid(_ cells: [Cell], selected: Date?) -> some View {
-        ZStack(alignment: .topLeading) {
-            Canvas { context, _ in
+        var labelCalendar = calendar
+        labelCalendar.locale = UsageLocale.current
+        let months = labelCalendar.shortStandaloneMonthSymbols
+        return ZStack(alignment: .topLeading) {
+            Canvas { context, size in
                 for (column, week) in activity.weeks.enumerated() {
                     guard let month = week.month else { continue }
                     if column == 0 && activity.weeks.dropFirst().first?.month != nil { continue }
-                    let label = Text("\(month)月").font(.system(size: 7, weight: .medium)).foregroundStyle(ink)
-                    let x = CGFloat(column) * Self.columnStep + 2
+                    let label = context.resolve(
+                        Text(months[month - 1]).font(.system(size: 7, weight: .medium)).foregroundStyle(ink)
+                    )
+                    let labelWidth = label.measure(in: size).width
+                    let x = min(CGFloat(column) * Self.columnStep + 2, size.width - labelWidth)
                     context.draw(label, at: CGPoint(x: x, y: 7), anchor: .leading)
                 }
             }
@@ -170,11 +176,13 @@ struct ActivityGrid: View {
     }
 
     private func dateLabel(_ day: ActivityCalendar.Day) -> String {
-        "\(calendar.component(.year, from: day.date))年\(calendar.component(.month, from: day.date))月\(calendar.component(.day, from: day.date))日"
+        day.date.formatted(UsageLocale.dateStyle(calendar: calendar).year().month(.abbreviated).day())
     }
 
     private func tokenLabel(_ day: ActivityCalendar.Day) -> String {
-        day.tokens.map { "\(TokenFormat.count($0)) 个 Token" } ?? "暂无用量数据"
+        guard let tokens = day.tokens else { return String(localized: "暂无用量数据") }
+        if tokens == 1 { return String(localized: "1 个 Token") }
+        return String(localized: "\(TokenFormat.count(tokens)) 个 Token")
     }
 
     private func opacity(_ tokens: UInt64?) -> Double {

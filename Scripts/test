@@ -1,8 +1,25 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-mkdir -p .build/tests
+test_app='.build/tests/UsageTests.app/Contents'
+mkdir -p "$test_app/MacOS" "$test_app/Resources"
+cat > "$test_app/Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>usage-tests</string>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+</dict>
+</plist>
+PLIST
+xcrun xcstringstool compile Shared/Localizable.xcstrings --output-directory "$test_app/Resources"
 xcrun swiftc -swift-version 6 -module-cache-path .build/module-cache \
-  Shared/AccountUsage.swift Shared/AccountRateLimits.swift Shared/UsageSnapshot.swift App/AppServerClient.swift App/LocalUsage.swift \
-  App/UsageController.swift Tests/UsageTests.swift -o .build/tests/usage-tests
-.build/tests/usage-tests
+  Shared/AccountUsage.swift Shared/AccountRateLimits.swift Shared/UsageLocale.swift Shared/UsageSnapshot.swift \
+  App/AppServerClient.swift App/LocalUsage.swift App/UsageController.swift Tests/UsageTests.swift -o "$test_app/MacOS/usage-tests"
+"$test_app/MacOS/usage-tests" -AppleLanguages '(zh-Hans)' -AppleLocale zh_CN
+"$test_app/MacOS/usage-tests" --verify-english -AppleLanguages '(en)' -AppleLocale en_US
+"$test_app/MacOS/usage-tests" --verify-traditional-chinese -AppleLanguages '(zh-TW)' -AppleLocale zh_TW
+"$test_app/MacOS/usage-tests" --verify-english -AppleLanguages '(fr)' -AppleLocale en_US

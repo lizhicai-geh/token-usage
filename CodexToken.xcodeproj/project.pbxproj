@@ -113,6 +113,7 @@
 			buildConfigurationList = C0DE00000000000000000015 /* Build configuration list for PBXNativeTarget "CodexTokenWidget" */;
 			buildPhases = (
 				C0DE0000000000000000000C /* Sources */,
+				C0DE00000000000000000019 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -138,10 +139,12 @@
 				LastUpgradeCheck = 2720;
 			};
 			buildConfigurationList = C0DE00000000000000000016 /* Build configuration list for PBXProject "CodexToken" */;
-			developmentRegion = "zh-Hans";
+			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
+				en,
 				"zh-Hans",
+				"zh-Hant",
 				Base,
 			);
 			mainGroup = C0DE00000000000000000009;
@@ -158,6 +161,13 @@
 
 /* Begin PBXResourcesBuildPhase section */
 		C0DE00000000000000000018 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C0DE00000000000000000019 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -219,7 +229,7 @@
 				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
-				DEVELOPMENT_LANGUAGE = "zh-Hans";
+				DEVELOPMENT_LANGUAGE = en;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_NO_COMMON_BLOCKS = YES;
