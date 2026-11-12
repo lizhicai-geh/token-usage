@@ -31,7 +31,7 @@ struct ActivityGrid: View {
     }
 
     var body: some View {
-        let cells = activity.weeks.enumerated().flatMap { column, week in
+        let columns = activity.weeks.enumerated().map { column, week in
             week.days.enumerated().compactMap { row, day -> Cell? in
                 guard !day.isFuture else { return nil }
                 return Cell(day: day, column: column, frame: CGRect(
@@ -42,6 +42,7 @@ struct ActivityGrid: View {
         }
         switch interaction {
         case .hover(let selection):
+            let cells = columns.joined()
             let selected = cells.first { $0.id == selection.wrappedValue }
             let selectAt: (CGPoint, CGFloat) -> Void = { location, offset in
                 let point = CGPoint(x: location.x - offset, y: location.y)
@@ -50,7 +51,7 @@ struct ActivityGrid: View {
             }
             ScrollViewReader { proxy in
                 ScrollView(.horizontal) {
-                    grid(cells, selected: selected?.id)
+                    grid(columns, selected: selected?.id)
                         .background {
                             ScrollOffsetObserver { offset in
                                 contentOffset = offset
@@ -86,11 +87,11 @@ struct ActivityGrid: View {
                 .accessibilityHint("左右滚动查看历史记录，悬停查看每日用量")
             }
         case .none, .widgetLinks:
-            grid(cells, selected: nil)
+            grid(columns, selected: nil)
         }
     }
 
-    private func grid(_ cells: [Cell], selected: Date?) -> some View {
+    private func grid(_ columns: [[Cell]], selected: Date?) -> some View {
         var labelCalendar = calendar
         labelCalendar.locale = UsageLocale.current
         let months = labelCalendar.shortStandaloneMonthSymbols
@@ -110,9 +111,9 @@ struct ActivityGrid: View {
             .accessibilityHidden(true)
 
             HStack(spacing: 0) {
-                ForEach(activity.weeks.indices, id: \.self) { column in
+                ForEach(columns.indices, id: \.self) { column in
                     ZStack(alignment: .topLeading) {
-                        ForEach(cells.filter { $0.column == column }) { cell in
+                        ForEach(columns[column]) { cell in
                             cellView(cell, isSelected: selected == cell.id)
                                 .position(x: Self.cellSide / 2, y: cell.frame.midY)
                         }
